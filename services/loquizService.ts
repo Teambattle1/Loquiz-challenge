@@ -3,24 +3,53 @@ import { PlayerResult, GameInfo, GameListItem, GameTask, PlayerAnswer, GamePhoto
 const V3_BASE_URL = 'https://api.loquiz.com/v3';
 const V4_BASE_URL = 'https://api.loquiz.com/v4';
 
-// Order of proxies: Try a direct fetch first, then use high-compatibility proxies
-const PROXIES = [
-    '', // Direct fetch
+const SUPABASE_PROXY = 'https://yktaxljydisfjyqhbnja.supabase.co/functions/v1/loquiz-proxy';
+
+// Fallback CORS proxies (used if Supabase proxy fails)
+const CORS_PROXIES = [
     'https://corsproxy.io/?',
     'https://api.codetabs.com/v1/proxy?quest=',
 ];
 
 const fetchWithRetry = async (urlStr: string, options: RequestInit): Promise<Response> => {
     let lastError: any = new Error("Network request failed");
-    
-    for (const proxyBase of PROXIES) {
+    const apiKey = (options.headers as Record<string, string>)?.['Authorization'] || '';
+
+    // 1. Try Supabase Edge Function proxy (server-side, no CORS issues)
+    try {
+        const res = await fetch(SUPABASE_PROXY, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: urlStr, apiKey }),
+        });
+        if (res.ok || [404, 401, 403, 422].includes(res.status)) {
+            if (res.ok) console.debug(`Successfully fetched: ${urlStr} via supabase-proxy`);
+            return res;
+        }
+        lastError = new Error(`Supabase proxy status: ${res.status}`);
+    } catch (e) {
+        lastError = e;
+    }
+
+    // 2. Try direct fetch (works on localhost / same-origin)
+    try {
+        const res = await fetch(urlStr, options);
+        if (res.ok || [404, 401, 403, 422].includes(res.status)) {
+            if (res.ok) console.debug(`Successfully fetched: ${urlStr} via direct`);
+            return res;
+        }
+        lastError = new Error(`Status: ${res.status}`);
+    } catch (e) {
+        lastError = e;
+    }
+
+    // 3. Try CORS proxy fallbacks
+    for (const proxyBase of CORS_PROXIES) {
         try {
-            const finalUrl = proxyBase ? `${proxyBase}${encodeURIComponent(urlStr)}` : urlStr;
+            const finalUrl = `${proxyBase}${encodeURIComponent(urlStr)}`;
             const res = await fetch(finalUrl, options);
-            
-            // If the proxy itself returned a success or a legitimate application-level error
             if (res.ok || [404, 401, 403, 422].includes(res.status)) {
-                if (res.ok) console.debug(`Successfully fetched: ${urlStr} via ${proxyBase || 'direct'}`);
+                if (res.ok) console.debug(`Successfully fetched: ${urlStr} via ${proxyBase}`);
                 return res;
             }
             lastError = new Error(`Status: ${res.status}`);

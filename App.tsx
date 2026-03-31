@@ -7,12 +7,13 @@ import Showtime from './components/Showtime';
 import TaskMaster from './components/TaskMaster';
 import TaskInspector from './components/TaskInspector';
 import Timeline from './components/Timeline';
+import ResultsReveal from './components/ResultsReveal';
 import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
 import { PlayerResult, GameTask, GamePhoto } from './types';
 import { HouseIcon } from './components/icons';
 
 // Define the exact allowed view states
-type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'admin';
+type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin';
 
 // PASTE YOUR API KEY HERE - Leave empty to use manual input
 const HARDCODED_API_KEY: string = "ApiKey-v1 63f6bec47b2cc86eb52ea7d84f2f96e250ab87544074cec8949d5862d368c154";
@@ -124,8 +125,12 @@ const App: React.FC = () => {
     setApiKey("GUEST");
   };
 
-  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'admin') => {
+  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin') => {
     setCurrentView(view);
+  };
+
+  const handleShowtimeComplete = () => {
+    setCurrentView('results-reveal');
   };
 
   const isHardcoded = !!(HARDCODED_API_KEY && HARDCODED_API_KEY.trim() !== "");
@@ -169,7 +174,7 @@ const App: React.FC = () => {
 
         {currentView === 'showtime' && selectedGameId && (
           <div className="w-full">
-            <Showtime photos={photos} onClose={goBackToDashboard} />
+            <Showtime photos={photos} onClose={goBackToDashboard} onShowtimeComplete={handleShowtimeComplete} />
           </div>
         )}
 
@@ -185,6 +190,10 @@ const App: React.FC = () => {
             <BackButton />
             <Timeline tasks={tasks} results={results} />
           </div>
+        )}
+
+        {currentView === 'results-reveal' && selectedGameId && dataLoaded && (
+          <ResultsReveal results={results} onClose={goBackToDashboard} />
         )}
 
         {currentView === 'admin' && selectedGameId && dataLoaded && (

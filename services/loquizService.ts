@@ -77,7 +77,7 @@ export const getTaskTitle = (t?: any): string => {
     
     const extract = (val: any): string | null => {
         if (!val) return null;
-        if (typeof val === 'string') return val.replace(/<[^>]*>/g, '').trim();
+        if (typeof val === 'string') return val.replace(/<\/[^>]+>/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
         if (typeof val === 'object') {
             if (val.text) return extract(val.text);
             if (Array.isArray(val.content)) return val.content.map((c: any) => extract(c)).filter(Boolean).join(' ');

@@ -75,6 +75,19 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    {music.isPlaying && (
+                        <button
+                            onClick={() => music.stop()}
+                            className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-orange-400 border border-orange-500/30 hover:bg-orange-600 hover:text-white transition-all flex items-center gap-1.5"
+                        >
+                            <span className="flex items-end gap-0.5 h-3">
+                                <span className="w-0.5 bg-orange-400 animate-pulse" style={{ height: '40%' }} />
+                                <span className="w-0.5 bg-orange-400 animate-pulse" style={{ height: '80%', animationDelay: '0.15s' }} />
+                                <span className="w-0.5 bg-orange-400 animate-pulse" style={{ height: '60%', animationDelay: '0.3s' }} />
+                            </span>
+                            Stop musik
+                        </button>
+                    )}
                     {!allRevealed && (
                         <button
                             onClick={revealAll}

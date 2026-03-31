@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { fetchTracks, getTrackUrl, MusicTrack } from '../services/musicService';
 
 const FADE_MS = 2000;
+const STOP_FADE_MS = 5000; // Longer fade for manual stop
 const CROSSFADE_LEAD = 3; // seconds before end to start crossfade
 
 export interface MusicPlayer {
@@ -122,14 +123,17 @@ export function useMusicPlayer(): MusicPlayer {
         stoppedRef.current = true;
         const audio = audioRef.current;
         if (audio) {
-            fadeVolume(audio, audio.volume, 0, FADE_MS).then(() => {
+            fadeVolume(audio, audio.volume, 0, STOP_FADE_MS).then(() => {
                 audio.pause();
                 audio.src = '';
                 audioRef.current = null;
             });
         }
-        setIsPlaying(false);
-        setCurrentTrack(null);
+        // Delay state update so UI shows "stopping" briefly
+        setTimeout(() => {
+            setIsPlaying(false);
+            setCurrentTrack(null);
+        }, STOP_FADE_MS);
     }, []);
 
     const setVolume = useCallback((v: number) => {

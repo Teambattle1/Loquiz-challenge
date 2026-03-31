@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PlayerResult } from '../types';
 import { TrophyIcon } from './icons';
-import { useMusicPlayer } from '../hooks/useMusicPlayer';
-import { getResultsPlaylistId } from '../services/musicService';
 
 interface ResultsRevealProps {
     results: PlayerResult[];
@@ -20,28 +18,66 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     const sortedResults = [...results].sort((a, b) => a.position - b.position);
     const totalTeams = sortedResults.length;
 
-    // revealedCount: how many teams are revealed (from bottom up)
     const [revealedCount, setRevealedCount] = useState(0);
-    const music = useMusicPlayer();
     const listRef = useRef<HTMLDivElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [musicPlaying, setMusicPlaying] = useState(false);
 
-    // Request fullscreen + start music on mount
-    useEffect(() => {
-        // Fullscreen
-        try { document.documentElement.requestFullscreen?.(); } catch {}
-        // Music
-        const playlistId = getResultsPlaylistId();
-        console.log('[ResultsReveal] Starting music, playlistId:', playlistId);
-        if (playlistId) {
-            music.playPlaylist(playlistId);
+    const TARGET_VOL = 0.25;
+    const FADE_MS = 3000;
+
+    const fadeAudio = useCallback((audio: HTMLAudioElement, from: number, to: number, ms: number): Promise<void> => {
+        return new Promise(resolve => {
+            const steps = 30;
+            const stepMs = ms / steps;
+            const delta = (to - from) / steps;
+            let step = 0;
+            audio.volume = from;
+            const interval = setInterval(() => {
+                step++;
+                audio.volume = Math.max(0, Math.min(1, from + delta * step));
+                if (step >= steps) {
+                    clearInterval(interval);
+                    audio.volume = Math.max(0, Math.min(1, to));
+                    resolve();
+                }
+            }, stepMs);
+        });
+    }, []);
+
+    const stopMusic = useCallback(() => {
+        const audio = audioRef.current;
+        if (audio && !audio.paused) {
+            fadeAudio(audio, audio.volume, 0, FADE_MS).then(() => {
+                audio.pause();
+                setMusicPlaying(false);
+            });
         }
+    }, [fadeAudio]);
+
+    // Start winner.mp3 on mount with fade-in at 25% volume
+    useEffect(() => {
+        try { document.documentElement.requestFullscreen?.(); } catch {}
+
+        const audio = new Audio('/winner.mp3');
+        audio.loop = true;
+        audio.volume = 0;
+        audioRef.current = audio;
+
+        audio.play().then(() => {
+            setMusicPlaying(true);
+            fadeAudio(audio, 0, TARGET_VOL, FADE_MS);
+        }).catch(e => console.warn('Winner audio failed:', e));
+
         return () => {
-            music.stop();
+            audio.pause();
+            audio.src = '';
+            audioRef.current = null;
             try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch {}
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Scroll to bottom on mount so last-place team is visible first
+    // Scroll to bottom on mount
     useEffect(() => {
         setTimeout(() => {
             listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -87,8 +123,9 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             }, 100);
 
             if (count >= revealsToTop3) {
-                // Stop at top 3 — user clicks manually for dramatic reveal
+                // Stop at top 3 — fade out music, user clicks manually for dramatic reveal
                 setAutoRevealing(false);
+                stopMusic();
                 return;
             }
             // Fast interval: 600ms per team
@@ -117,9 +154,9 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {music.isPlaying && (
+                    {musicPlaying && (
                         <button
-                            onClick={() => music.stop()}
+                            onClick={stopMusic}
                             className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-orange-400 border border-orange-500/30 hover:bg-orange-600 hover:text-white transition-all flex items-center gap-1.5"
                         >
                             <span className="flex items-end gap-0.5 h-3">
@@ -246,14 +283,14 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             )}
 
             {/* Music indicator */}
-            {music.isPlaying && music.currentTrack && (
-                <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full border border-zinc-700/50">
+            {musicPlaying && (
+                <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full border border-zinc-700/50 z-30">
                     <div className="flex items-end gap-0.5 h-3">
                         <div className="w-0.5 bg-orange-500 animate-pulse" style={{ height: '40%' }} />
                         <div className="w-0.5 bg-orange-500 animate-pulse" style={{ height: '80%', animationDelay: '0.15s' }} />
                         <div className="w-0.5 bg-orange-500 animate-pulse" style={{ height: '60%', animationDelay: '0.3s' }} />
                     </div>
-                    <span className="text-zinc-500 text-[10px] font-mono truncate max-w-[150px]">{music.currentTrack.title}</span>
+                    <span className="text-zinc-500 text-[10px] font-mono">Winner</span>
                 </div>
             )}
         </div>

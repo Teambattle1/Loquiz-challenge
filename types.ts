@@ -15,6 +15,8 @@ export interface PlayerResult {
   isFinished?: boolean;
   odometer?: number;
   color?: string;
+  startTime?: number;
+  finishTime?: number;
   answers?: PlayerAnswer[];
 }
 

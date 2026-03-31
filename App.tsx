@@ -6,12 +6,13 @@ import SessionDashboard from './components/SessionDashboard';
 import Showtime from './components/Showtime';
 import TaskMaster from './components/TaskMaster';
 import TaskInspector from './components/TaskInspector';
-import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos } from './services/loquizService';
+import Timeline from './components/Timeline';
+import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
 import { PlayerResult, GameTask, GamePhoto } from './types';
 import { HouseIcon } from './components/icons';
 
 // Define the exact allowed view states
-type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'admin';
+type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'admin';
 
 // PASTE YOUR API KEY HERE - Leave empty to use manual input
 const HARDCODED_API_KEY: string = "ApiKey-v1 63f6bec47b2cc86eb52ea7d84f2f96e250ab87544074cec8949d5862d368c154";
@@ -54,7 +55,7 @@ const App: React.FC = () => {
       if (finalTasks.length === 0 && info.tasks && Array.isArray(info.tasks)) {
         finalTasks = info.tasks.map((t: any) => ({
           id: t.id,
-          title: t.title || t.name || t.id,
+          title: getTaskTitle(t),
           type: t.type || 'v4-embedded',
           raw: t,
         }));
@@ -123,7 +124,7 @@ const App: React.FC = () => {
     setApiKey("GUEST");
   };
 
-  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'admin') => {
+  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'admin') => {
     setCurrentView(view);
   };
 
@@ -176,6 +177,13 @@ const App: React.FC = () => {
           <div className="w-full max-w-[98vw] h-[80vh] glass-panel rounded-3xl overflow-hidden border-t-8 border-t-orange-600 flex flex-col shadow-[0_40px_80px_rgba(0,0,0,0.7)] relative">
             <BackButton />
             <TaskMaster tasks={tasks} results={results} />
+          </div>
+        )}
+
+        {currentView === 'timeline' && selectedGameId && dataLoaded && (
+          <div className="w-full max-w-[98vw] h-[80vh] glass-panel rounded-3xl overflow-hidden border-t-8 border-t-purple-600 flex flex-col shadow-[0_40px_80px_rgba(0,0,0,0.7)] relative">
+            <BackButton />
+            <Timeline tasks={tasks} results={results} />
           </div>
         )}
 

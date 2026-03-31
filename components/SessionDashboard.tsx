@@ -6,13 +6,14 @@ interface SessionDashboardProps {
     apiKey: string;
     gameId: string;
     onBack: () => void;
-    onNavigate: (view: 'results' | 'showtime' | 'taskmaster' | 'admin') => void;
+    onNavigate: (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'admin') => void;
 }
 
 const buttons = [
     { id: 'results' as const, label: 'Results', icon: '🏆', color: 'from-orange-600 to-amber-600', border: 'border-orange-500/40', glow: 'shadow-[0_0_40px_rgba(234,88,12,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(234,88,12,0.5)]' },
     { id: 'showtime' as const, label: 'Showtime', icon: '📸', color: 'from-pink-600 to-rose-600', border: 'border-pink-500/40', glow: 'shadow-[0_0_40px_rgba(236,72,153,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(236,72,153,0.5)]' },
     { id: 'taskmaster' as const, label: 'TaskMaster', icon: '📊', color: 'from-blue-600 to-cyan-600', border: 'border-blue-500/40', glow: 'shadow-[0_0_40px_rgba(37,99,235,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(37,99,235,0.5)]' },
+    { id: 'timeline' as const, label: 'Timeline', icon: '⏱️', color: 'from-purple-600 to-violet-600', border: 'border-purple-500/40', glow: 'shadow-[0_0_40px_rgba(147,51,234,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(147,51,234,0.5)]' },
     { id: 'admin' as const, label: 'Admin', icon: '⚙️', color: 'from-zinc-600 to-zinc-500', border: 'border-zinc-500/40', glow: 'shadow-[0_0_40px_rgba(113,113,122,0.2)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(113,113,122,0.4)]' },
 ];
 
@@ -50,7 +51,7 @@ const SessionDashboard: React.FC<SessionDashboardProps> = ({ apiKey, gameId, onB
             <h1 className="text-4xl md:text-7xl font-black text-white mb-2 uppercase tracking-tighter drop-shadow-2xl">TEAMCHALLENGE</h1>
             {gameName && <p className="text-base md:text-xl text-orange-500 font-black uppercase tracking-[0.3em] drop-shadow-md mb-12">{gameName}</p>}
 
-            <div className="grid grid-cols-2 gap-6 md:gap-8 w-full max-w-lg">
+            <div className="grid grid-cols-3 gap-4 md:gap-6 w-full max-w-2xl">
                 {buttons.map(btn => (
                     <button
                         key={btn.id}

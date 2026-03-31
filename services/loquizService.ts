@@ -106,8 +106,7 @@ export const fetchGames = async (apiKey: string): Promise<GameListItem[]> => {
     if (apiKey === 'GUEST') return [];
     const headers = getAuthHeaders(apiKey);
     const endpoints = [
-        `${V4_BASE_URL}/games?limit=1000`,
-        `${V3_BASE_URL}/games?limit=1000`
+        `${V3_BASE_URL}/games?limit=1000`,
     ];
 
     const allFetchedGames: GameListItem[] = [];
@@ -162,36 +161,17 @@ export const fetchGameInfo = async (gameId: string, apiKey: string): Promise<Gam
   return { name: gameId };
 };
 
-export const fetchGameTasks = async (gameId: string, apiKey: string): Promise<GameTask[]> => {
-    const headers = getAuthHeaders(apiKey);
-    const taskEndpoints = [
-        `${V4_BASE_URL}/games/${gameId}/tasks?limit=500`,
-        `${V4_BASE_URL}/tasks?gameId=${gameId}&limit=500`,
-        `${V3_BASE_URL}/games/${gameId}/questions?limit=500`
-    ];
-
-    for (const url of taskEndpoints) {
-        try {
-            const response = await fetchWithRetry(url, { headers });
-            if (response.ok) {
-                const json = await response.json();
-                const data = Array.isArray(json) ? json : (json.data || json.items || []);
-                if (data.length > 0) {
-                    return mapApiTasksToGameTasks(data);
-                }
-            }
-        } catch (e) {}
-    }
+export const fetchGameTasks = async (_gameId: string, _apiKey: string): Promise<GameTask[]> => {
+    // V3 has no game-scoped tasks endpoint; V4 /tasks is for task management, not game results.
+    // Tasks are loaded via fetchGameInfo(?includeTasks=true) fallback in App.tsx.
     return [];
 };
 
 export const fetchGameResults = async (gameId: string, apiKey: string): Promise<PlayerResult[]> => {
   const headers = getAuthHeaders(apiKey);
-  
+
   const resultEndpoints = [
-      `${V4_BASE_URL}/games/${gameId}/results?sort=-totalScore&includeAnswers=true&limit=100`,
-      `${V4_BASE_URL}/results?gameId=${gameId}&includeAnswers=true&limit=100`,
-      `${V3_BASE_URL}/games/${gameId}/results`
+      `${V3_BASE_URL}/results/${gameId}/teams?sort=-totalScore&includeAnswers=true&limit=100`,
   ];
 
   for (const url of resultEndpoints) {
@@ -222,6 +202,8 @@ export const fetchGameResults = async (gameId: string, apiKey: string): Promise<
                       incorrectAnswers: team.incorrectAnswers,
                       isFinished: team.isFinished,
                       color: team.color,
+                      startTime: team.startTime,
+                      finishTime: team.finishTime,
                       answers
                   };
               });
@@ -236,9 +218,8 @@ export const fetchGamePhotos = async (gameId: string, apiKey: string): Promise<G
     let photos: any[] = [];
     
     const endpoints = [
-        `${V4_BASE_URL}/results/media?gameId=${gameId}&limit=200`,
-        `${V4_BASE_URL}/results/${gameId}/media`,
-        `${V3_BASE_URL}/results/${gameId}/media`
+        `${V3_BASE_URL}/results/${gameId}/media`,
+        `${V4_BASE_URL}/games/${gameId}/media-archive`,
     ];
 
     for (const url of endpoints) {
@@ -254,47 +235,40 @@ export const fetchGamePhotos = async (gameId: string, apiKey: string): Promise<G
         } catch (e) {}
     }
 
-    // Comprehensive team/answer media scanning
+    // Build lookup maps for team/task names
+    const teamNameMap = new Map<string, string>();
+    const taskTitleMap = new Map<string, string>();
     try {
-        const results = await fetchGameResults(gameId, apiKey);
-        results.forEach(team => {
-            const teamRaw = (team as any).raw || {};
-            
-            // Check team-level media
-            const teamMedia = teamRaw.media || [];
-            if (Array.isArray(teamMedia)) {
-                teamMedia.forEach(m => photos.push({ ...m, teamName: team.name }));
-            }
-
-            // Check individual answer media
-            team.answers?.forEach(ans => {
-                const raw = ans.raw || {};
-                const possibleUrls = [
-                    raw.mediaUrl, raw.url, raw.file, raw.imageUrl, 
-                    raw.answer?.mediaUrl, raw.answer?.url
-                ];
-                
-                possibleUrls.forEach(url => {
-                    if (url && typeof url === 'string' && url.startsWith('http')) {
-                        photos.push({ ...raw, url, teamName: team.name, taskTitle: 'Photo' });
-                    }
-                });
+        const teamsRes = await fetchWithRetry(
+            `${V3_BASE_URL}/results/${gameId}/teams?limit=100`, { headers }
+        );
+        if (teamsRes.ok) {
+            const teamsJson = await teamsRes.json();
+            const teams = Array.isArray(teamsJson) ? teamsJson : (teamsJson.items || []);
+            teams.forEach((t: any) => { if (t.id && t.name) teamNameMap.set(t.id, t.name); });
+        }
+    } catch (e) {}
+    try {
+        const info = await fetchGameInfo(gameId, apiKey);
+        if (info.tasks && Array.isArray(info.tasks)) {
+            info.tasks.forEach((t: any) => {
+                if (t.id) taskTitleMap.set(t.id, getTaskTitle(t));
             });
-        });
+        }
     } catch (e) {}
 
     const seenUrls = new Set<string>();
     return photos
         .map((p: any) => {
-            const url = p.url || p.mediaUrl || p.file || p.imageUrl || p.large;
-            const thumb = p.thumbnailUrl || p.thumbnail || p.thumb || p.small || url;
+            const url = p.original || p.optimized || p.optimized1200 || p.url || p.mediaUrl || p.file || p.imageUrl || p.large;
+            const thumb = p.thumbnail || p.thumbnailUrl || p.thumb || p.small || url;
             return {
                 id: p.id || String(Math.random()),
                 url: url,
                 thumbnailUrl: thumb,
-                teamName: p.team?.name || p.teamName || 'Unknown Team',
-                taskTitle: getTaskTitle(p.task || p.question) || p.taskTitle || 'Photo',
-                timestamp: p.timestamp || p.created || p.createdAt
+                teamName: p.team?.name || p.teamName || teamNameMap.get(p.teamId) || 'Unknown Team',
+                taskTitle: taskTitleMap.get(p.taskId) || p.taskTitle || (p.task ? getTaskTitle(p.task) : null) || 'Photo',
+                timestamp: p.time || p.timestamp || p.created || p.createdAt
             };
         })
         .filter(p => {

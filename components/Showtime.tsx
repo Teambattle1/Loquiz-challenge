@@ -83,12 +83,16 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                 setCurrentIndex(prev => {
                     const next = prev + 1;
                     if (isShowtimeMode && next >= slideshowPhotos.length) {
+                        // Last photo done — transition to results
                         if (!showtimeCompleteTriggered.current) {
                             showtimeCompleteTriggered.current = true;
-                            music.stop();
                             setTimeout(() => onShowtimeComplete?.(), 500);
                         }
                         return prev;
+                    }
+                    // Start fading music when reaching the LAST photo
+                    if (isShowtimeMode && next === slideshowPhotos.length - 1) {
+                        music.stop(); // 5s fade-out starts while last photo is showing
                     }
                     return next % slideshowPhotos.length;
                 });

@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { fetchTracks, getTrackUrl, MusicTrack } from '../services/musicService';
 
-const FADE_MS = 2000;
+const FADE_IN_MS = 4000;  // Smooth fade in when starting
+const FADE_MS = 2000;     // Crossfade between tracks
 const STOP_FADE_MS = 5000; // Longer fade for manual stop
 const CROSSFADE_LEAD = 3; // seconds before end to start crossfade
 
@@ -105,7 +106,7 @@ export function useMusicPlayer(): MusicPlayer {
 
         try {
             await audio.play();
-            fadeVolume(audio, 0, vol, FADE_MS);
+            fadeVolume(audio, 0, vol, FADE_IN_MS);
         } catch (e) {
             console.warn('Failed to play track:', e);
         }

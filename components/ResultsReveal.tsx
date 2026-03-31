@@ -48,6 +48,9 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         }, 300);
     }, []);
 
+    const [autoRevealing, setAutoRevealing] = useState(false);
+    const autoRevealRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const revealNext = () => {
         if (revealedCount < totalTeams) {
             setRevealedCount(prev => prev + 1);
@@ -59,6 +62,45 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     };
 
     const allRevealed = revealedCount >= totalTeams;
+
+    // How many reveals needed to reach top 3 (positions 1,2,3)
+    // revealedCount needed for position P: totalTeams - P + 1
+    // For position 4 (first non-top3): totalTeams - 4 + 1 = totalTeams - 3
+    const revealsToTop3 = totalTeams - 3;
+
+    // Auto-reveal: fast through non-top3, then stop for dramatic top3
+    const startAutoReveal = () => {
+        if (autoRevealing) return;
+        setAutoRevealing(true);
+        let count = revealedCount;
+        const doNext = () => {
+            count++;
+            setRevealedCount(count);
+            // Scroll the newly revealed team into view
+            setTimeout(() => {
+                const el = listRef.current;
+                if (el) {
+                    // Scroll up a bit to show the revealed team
+                    const scrollTarget = el.scrollHeight - (el.scrollHeight * (count / totalTeams));
+                    el.scrollTo({ top: Math.max(0, scrollTarget - 200), behavior: 'smooth' });
+                }
+            }, 100);
+
+            if (count >= revealsToTop3) {
+                // Stop at top 3 — user clicks manually for dramatic reveal
+                setAutoRevealing(false);
+                return;
+            }
+            // Fast interval: 600ms per team
+            autoRevealRef.current = setTimeout(doNext, 600);
+        };
+        doNext();
+    };
+
+    // Cleanup auto-reveal on unmount
+    useEffect(() => {
+        return () => { if (autoRevealRef.current) clearTimeout(autoRevealRef.current); };
+    }, []);
 
     // A team at position P is revealed if revealedCount >= (totalTeams - P + 1)
     // i.e. last place revealed first, first place revealed last
@@ -167,13 +209,39 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
 
             {/* Bottom action bar */}
             {!allRevealed && (
-                <div className="p-6 flex justify-center bg-gradient-to-t from-black via-black/80 to-transparent shrink-0">
-                    <button
-                        onClick={revealNext}
-                        className="px-10 py-4 bg-orange-600 hover:bg-orange-500 text-white font-black text-lg uppercase tracking-widest rounded-full shadow-[0_0_40px_rgba(234,88,12,0.4)] hover:shadow-[0_0_60px_rgba(234,88,12,0.6)] hover:scale-105 active:scale-95 transition-all"
-                    >
-                        Vis næste
-                    </button>
+                <div className="p-6 flex justify-center gap-4 bg-gradient-to-t from-black via-black/80 to-transparent shrink-0">
+                    {/* Before top 3: show fast-forward + manual */}
+                    {revealedCount < revealsToTop3 && !autoRevealing && (
+                        <button
+                            onClick={startAutoReveal}
+                            className="px-8 py-4 bg-orange-600 hover:bg-orange-500 text-white font-black text-lg uppercase tracking-widest rounded-full shadow-[0_0_40px_rgba(234,88,12,0.4)] hover:shadow-[0_0_60px_rgba(234,88,12,0.6)] hover:scale-105 active:scale-95 transition-all"
+                        >
+                            ▶ Start Reveal
+                        </button>
+                    )}
+                    {/* During auto-reveal */}
+                    {autoRevealing && (
+                        <div className="px-8 py-4 bg-zinc-800 text-orange-400 font-black text-lg uppercase tracking-widest rounded-full border border-orange-500/30 animate-pulse">
+                            Revealing...
+                        </div>
+                    )}
+                    {/* At top 3: dramatic manual reveal */}
+                    {revealedCount >= revealsToTop3 && !autoRevealing && (
+                        <button
+                            onClick={revealNext}
+                            className={`px-12 py-5 font-black text-xl uppercase tracking-widest rounded-full hover:scale-105 active:scale-95 transition-all ${
+                                totalTeams - revealedCount === 3
+                                    ? 'bg-gradient-to-r from-orange-700 to-amber-600 text-white shadow-[0_0_40px_rgba(234,88,12,0.4)]'
+                                    : totalTeams - revealedCount === 2
+                                    ? 'bg-gradient-to-r from-zinc-500 to-zinc-300 text-black shadow-[0_0_40px_rgba(161,161,170,0.4)]'
+                                    : 'bg-gradient-to-r from-yellow-500 to-amber-400 text-black shadow-[0_0_60px_rgba(250,204,21,0.5)]'
+                            }`}
+                        >
+                            {totalTeams - revealedCount === 3 ? '🥉 Vis #3' :
+                             totalTeams - revealedCount === 2 ? '🥈 Vis #2' :
+                             '🥇 Vis #1'}
+                        </button>
+                    )}
                 </div>
             )}
 

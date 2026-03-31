@@ -369,15 +369,18 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
         );
     }
 
-    // ─── Slideshow view ─────────────────────────────────────────
+    // ─── Card-deck slideshow view ─────────────────────────────────
     const currentPhoto = slideshowPhotos[currentIndex];
     if (!currentPhoto) return null;
+    const nextIdx = (currentIndex + 1) % slideshowPhotos.length;
+    const nextPhoto = slideshowPhotos.length > 1 ? slideshowPhotos[nextIdx] : null;
     const currentRotation = rotations[currentPhoto.id] || 0;
+    const nextRotation = nextPhoto ? (rotations[nextPhoto.id] || 0) : 0;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black text-white flex flex-col animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-black text-white flex flex-col">
             {/* Header */}
-            <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-20 bg-gradient-to-b from-black/80 to-transparent">
+            <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-30 bg-gradient-to-b from-black/80 to-transparent">
                 <div className="flex items-center gap-4">
                     <button onClick={() => { setView('grid'); setIsShowtimeMode(false); }} className="text-zinc-400 hover:text-white flex items-center gap-1 uppercase text-xs font-bold tracking-wider">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
@@ -388,72 +391,95 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                     </span>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* Rotate current */}
-                    <button
-                        onClick={() => rotatePhoto(currentPhoto.id)}
-                        className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-zinc-800/80 text-zinc-400 border border-zinc-700 hover:text-white transition-all"
-                    >
-                        ↻ Rotate
-                    </button>
+                    <button onClick={() => rotatePhoto(currentPhoto.id)} className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-zinc-800/80 text-zinc-400 border border-zinc-700 hover:text-white transition-all">↻</button>
                     <button
                         onClick={() => setIsPlaying(!isPlaying)}
                         className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all ${isPlaying ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}
                     >
-                        {isPlaying ? 'Pause ⏸' : 'Play ▶'}
+                        {isPlaying ? '⏸' : '▶'}
                     </button>
                     <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-900/80 hover:bg-red-900/50 hover:text-red-400 border border-zinc-700 flex items-center justify-center transition-colors">✕</button>
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-grow flex items-center justify-center relative overflow-hidden h-full w-full">
-                {/* Prev hover */}
-                <div
-                    className="absolute left-0 top-0 h-full w-1/4 z-10 opacity-0 hover:opacity-100 flex items-center justify-start pl-4 bg-gradient-to-r from-black/50 to-transparent cursor-pointer transition-opacity"
-                    onClick={() => setCurrentIndex(prev => (prev - 1 + slideshowPhotos.length) % slideshowPhotos.length)}
-                >
-                    <div className="p-3 rounded-full bg-black/50 border border-white/20 text-white text-2xl">‹</div>
-                </div>
+            {/* Card deck area — full screen */}
+            <div className="flex-grow relative overflow-hidden" style={{ perspective: '1200px' }}>
+                {/* Next card (peeking from right, tilted) */}
+                {nextPhoto && nextIdx !== currentIndex && (
+                    <div
+                        className="absolute inset-0 flex items-center justify-end pr-[2vw] z-10 pointer-events-none"
+                        style={{ perspective: '1200px' }}
+                    >
+                        <div
+                            className="relative"
+                            style={{
+                                width: '70vw',
+                                maxHeight: '80vh',
+                                transform: 'translateX(25vw) rotateY(-8deg) scale(0.85)',
+                                transformOrigin: 'left center',
+                                opacity: 0.5,
+                                transition: 'all 0.4s ease',
+                            }}
+                        >
+                            <img
+                                src={nextPhoto.url}
+                                alt="Next"
+                                className="w-full h-auto max-h-[80vh] object-contain rounded-xl border border-white/5"
+                                style={nextRotation ? { transform: `rotate(${nextRotation}deg)` } : undefined}
+                            />
+                        </div>
+                    </div>
+                )}
 
-                {/* Photo */}
-                <div key={currentPhoto.id} className="relative max-w-full max-h-full flex items-center justify-center p-4 animate-fade-in">
-                    <img
-                        src={currentPhoto.url}
-                        alt="Game Photo"
-                        className="max-h-[85vh] max-w-[95vw] object-contain shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-white/10 rounded transition-transform duration-300"
-                        style={currentRotation ? { transform: `rotate(${currentRotation}deg)` } : undefined}
-                    />
-                    {/* Caption */}
-                    <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 text-center max-w-[90%]">
-                        {currentPhoto.teamName && (
-                            <p className="text-orange-400 font-black text-lg md:text-2xl uppercase tracking-wide leading-none mb-1">{currentPhoto.teamName}</p>
-                        )}
-                        {currentPhoto.taskTitle && (
-                            <p className="text-zinc-300 font-bold text-xs md:text-sm uppercase tracking-wider">{currentPhoto.taskTitle}</p>
-                        )}
+                {/* Current card (center, full size, animated) */}
+                <div
+                    key={`card-${currentIndex}-${currentPhoto.id}`}
+                    className="absolute inset-0 flex items-center justify-center z-20"
+                    style={{
+                        animation: 'cardSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                    }}
+                >
+                    <div className="relative" style={{ width: '85vw', maxHeight: '85vh' }}>
+                        <img
+                            src={currentPhoto.url}
+                            alt="Game Photo"
+                            className="w-full h-auto max-h-[85vh] object-contain rounded-xl shadow-[0_20px_80px_rgba(0,0,0,0.9)] border border-white/10"
+                            style={currentRotation ? { transform: `rotate(${currentRotation}deg)` } : undefined}
+                        />
+                        {/* Caption */}
+                        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 text-center max-w-[80%]">
+                            {currentPhoto.teamName && (
+                                <p className="text-orange-400 font-black text-xl md:text-3xl uppercase tracking-wide leading-none mb-1">{currentPhoto.teamName}</p>
+                            )}
+                            {currentPhoto.taskTitle && (
+                                <p className="text-zinc-300 font-bold text-xs md:text-sm uppercase tracking-wider">{currentPhoto.taskTitle}</p>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* Next hover */}
+                {/* Click zones for manual nav */}
                 <div
-                    className="absolute right-0 top-0 h-full w-1/4 z-10 opacity-0 hover:opacity-100 flex items-center justify-end pr-4 bg-gradient-to-l from-black/50 to-transparent cursor-pointer transition-opacity"
+                    className="absolute left-0 top-0 h-full w-1/3 z-25 cursor-pointer"
+                    onClick={() => setCurrentIndex(prev => (prev - 1 + slideshowPhotos.length) % slideshowPhotos.length)}
+                />
+                <div
+                    className="absolute right-0 top-0 h-full w-1/3 z-25 cursor-pointer"
                     onClick={() => setCurrentIndex(prev => (prev + 1) % slideshowPhotos.length)}
-                >
-                    <div className="p-3 rounded-full bg-black/50 border border-white/20 text-white text-2xl">›</div>
-                </div>
+                />
             </div>
 
             {/* Progress Bar */}
-            <div className="h-1 bg-zinc-900 w-full relative">
+            <div className="h-1.5 bg-zinc-900 w-full relative shrink-0">
                 <div
-                    className={`h-full transition-all duration-300 ${isShowtimeMode ? 'bg-pink-500' : 'bg-orange-500'}`}
+                    className={`h-full transition-all duration-500 ${isShowtimeMode ? 'bg-pink-500' : 'bg-orange-500'}`}
                     style={{ width: `${((currentIndex + 1) / slideshowPhotos.length) * 100}%` }}
                 />
             </div>
 
             {/* Music indicator */}
             {music.isPlaying && music.currentTrack && (
-                <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full border border-zinc-700/50">
+                <div className="absolute bottom-6 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full border border-zinc-700/50 z-30">
                     <div className="flex items-end gap-0.5 h-3">
                         <div className="w-0.5 bg-orange-500 animate-pulse" style={{ height: '40%' }} />
                         <div className="w-0.5 bg-orange-500 animate-pulse" style={{ height: '80%', animationDelay: '0.15s' }} />

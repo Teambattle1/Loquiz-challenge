@@ -218,7 +218,7 @@ export const fetchGamePhotos = async (gameId: string, apiKey: string): Promise<G
     let photos: any[] = [];
     
     const endpoints = [
-        `${V3_BASE_URL}/results/${gameId}/media`,
+        `${V3_BASE_URL}/results/${gameId}/media?limit=500`,
         `${V4_BASE_URL}/games/${gameId}/media-archive`,
     ];
 

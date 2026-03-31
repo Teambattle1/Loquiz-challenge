@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchGameInfo } from '../services/loquizService';
-import { HouseIcon } from './icons';
+import { HouseIcon, TrophyIcon, CameraIcon, ChartIcon, ClockIcon, GearIcon } from './icons';
 
 interface SessionDashboardProps {
     apiKey: string;
@@ -10,11 +10,11 @@ interface SessionDashboardProps {
 }
 
 const buttons = [
-    { id: 'results' as const, label: 'Results', icon: '🏆', color: 'from-orange-600 to-amber-600', border: 'border-orange-500/40', glow: 'shadow-[0_0_40px_rgba(234,88,12,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(234,88,12,0.5)]' },
-    { id: 'showtime' as const, label: 'Showtime', icon: '📸', color: 'from-pink-600 to-rose-600', border: 'border-pink-500/40', glow: 'shadow-[0_0_40px_rgba(236,72,153,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(236,72,153,0.5)]' },
-    { id: 'taskmaster' as const, label: 'TaskMaster', icon: '📊', color: 'from-blue-600 to-cyan-600', border: 'border-blue-500/40', glow: 'shadow-[0_0_40px_rgba(37,99,235,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(37,99,235,0.5)]' },
-    { id: 'timeline' as const, label: 'Timeline', icon: '⏱️', color: 'from-purple-600 to-violet-600', border: 'border-purple-500/40', glow: 'shadow-[0_0_40px_rgba(147,51,234,0.3)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(147,51,234,0.5)]' },
-    { id: 'admin' as const, label: 'Admin', icon: '⚙️', color: 'from-zinc-600 to-zinc-500', border: 'border-zinc-500/40', glow: 'shadow-[0_0_40px_rgba(113,113,122,0.2)]', hoverGlow: 'hover:shadow-[0_0_60px_rgba(113,113,122,0.4)]' },
+    { id: 'results' as const, label: 'Results', Icon: TrophyIcon },
+    { id: 'showtime' as const, label: 'Showtime', Icon: CameraIcon },
+    { id: 'taskmaster' as const, label: 'TaskMaster', Icon: ChartIcon },
+    { id: 'timeline' as const, label: 'Timeline', Icon: ClockIcon },
+    { id: 'admin' as const, label: 'Admin', Icon: GearIcon },
 ];
 
 const SessionDashboard: React.FC<SessionDashboardProps> = ({ apiKey, gameId, onBack, onNavigate }) => {
@@ -51,15 +51,17 @@ const SessionDashboard: React.FC<SessionDashboardProps> = ({ apiKey, gameId, onB
             <h1 className="text-4xl md:text-7xl font-black text-white mb-2 uppercase tracking-tighter drop-shadow-2xl">TEAMCHALLENGE</h1>
             {gameName && <p className="text-base md:text-xl text-orange-500 font-black uppercase tracking-[0.3em] drop-shadow-md mb-12">{gameName}</p>}
 
-            <div className="grid grid-cols-3 gap-4 md:gap-6 w-full max-w-2xl">
+            <div className="grid grid-cols-3 gap-5 md:gap-7 w-full max-w-xl">
                 {buttons.map(btn => (
                     <button
                         key={btn.id}
                         onClick={() => onNavigate(btn.id)}
-                        className={`aspect-square rounded-full bg-gradient-to-br ${btn.color} ${btn.border} border-2 ${btn.glow} ${btn.hoverGlow} hover:scale-110 active:scale-95 transition-all duration-300 flex flex-col items-center justify-center gap-2 md:gap-3`}
+                        className="group aspect-square rounded-2xl bg-zinc-900/80 border border-orange-500/20 hover:border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.1)] hover:shadow-[0_0_40px_rgba(234,88,12,0.3)] hover:scale-105 active:scale-95 transition-all duration-300 flex flex-col items-center justify-center gap-3"
                     >
-                        <span className="text-3xl md:text-5xl">{btn.icon}</span>
-                        <span className="text-white font-black text-xs md:text-sm uppercase tracking-widest">{btn.label}</span>
+                        <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-orange-600/10 border border-orange-500/30 group-hover:bg-orange-600/20 group-hover:border-orange-500/50 transition-all flex items-center justify-center">
+                            <btn.Icon className="w-6 h-6 md:w-8 md:h-8 text-orange-500 group-hover:text-orange-400 transition-colors" />
+                        </div>
+                        <span className="text-orange-500 group-hover:text-orange-400 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] transition-colors">{btn.label}</span>
                     </button>
                 ))}
             </div>

@@ -5,7 +5,9 @@ const PLAY_SUPABASE_URL = 'https://infnlcqdwycjfssymeic.supabase.co';
 const PLAY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluZm5sY3Fkd3ljamZzc3ltZWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYxNDYzMzUsImV4cCI6MjA3MTcyMjMzNX0.Mo4wpqV5Ax-TqOwMpNXM4NqiHv7fC0TLM3wBKAPj15Q';
 const MUSIC_BUCKET = 'music';
 
-const supabase = createClient(PLAY_SUPABASE_URL, PLAY_SUPABASE_ANON_KEY);
+const supabase = createClient(PLAY_SUPABASE_URL, PLAY_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
 
 export interface MusicPlaylist {
     id: string;

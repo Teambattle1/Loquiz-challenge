@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { fetchGameInfo } from '../services/loquizService';
-import { HouseIcon, TrophyIcon, CameraIcon, ChartIcon, ClockIcon, GearIcon } from './icons';
+import { HouseIcon, TrophyIcon, CameraIcon, ChartIcon, ClockIcon, GearIcon, ListIcon } from './icons';
 
 interface SessionDashboardProps {
     apiKey: string;
     gameId: string;
     onBack: () => void;
-    onNavigate: (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'admin') => void;
+    onNavigate: (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin' | 'client-tasks') => void;
 }
 
 const buttons = [
@@ -14,6 +14,7 @@ const buttons = [
     { id: 'showtime' as const, label: 'Showtime', Icon: CameraIcon },
     { id: 'taskmaster' as const, label: 'TaskMaster', Icon: ChartIcon },
     { id: 'timeline' as const, label: 'Timeline', Icon: ClockIcon },
+    { id: 'client-tasks' as const, label: 'Client', Icon: ListIcon },
     { id: 'admin' as const, label: 'Admin', Icon: GearIcon },
 ];
 

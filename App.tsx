@@ -9,28 +9,40 @@ import TaskInspector from './components/TaskInspector';
 import Timeline from './components/Timeline';
 import ResultsReveal from './components/ResultsReveal';
 import PublicGallery from './components/PublicGallery';
+import ClientHub from './components/ClientHub';
 import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
 import { PlayerResult, GameTask, GamePhoto } from './types';
 import { HouseIcon } from './components/icons';
 
 // Define the exact allowed view states
-type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin';
+type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin' | 'client-tasks';
 
 // PASTE YOUR API KEY HERE - Leave empty to use manual input
 const HARDCODED_API_KEY: string = "ApiKey-v1 63f6bec47b2cc86eb52ea7d84f2f96e250ab87544074cec8949d5862d368c154";
 
-// Check for ?gallery=GAMEID in URL
+// Check for ?gallery=GAMEID or ?client=GAMEID in URL
 const getGalleryIdFromUrl = (): string | null => {
   const params = new URLSearchParams(window.location.search);
   return params.get('gallery');
 };
 
+const getClientIdFromUrl = (): string | null => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('client');
+};
+
 const App: React.FC = () => {
   const [galleryId] = useState<string | null>(getGalleryIdFromUrl);
+  const [clientId] = useState<string | null>(getClientIdFromUrl);
 
   // If ?gallery=GAMEID, show public gallery directly
   if (galleryId) {
     return <PublicGallery gameId={galleryId} />;
+  }
+
+  // If ?client=GAMEID, show public gallery with tasks tab
+  if (clientId) {
+    return <PublicGallery gameId={clientId} initialTab="tasks" />;
   }
 
   return <MainApp />;
@@ -145,7 +157,7 @@ const MainApp: React.FC = () => {
     setApiKey("GUEST");
   };
 
-  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin') => {
+  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin' | 'client-tasks') => {
     setCurrentView(view);
   };
 
@@ -214,6 +226,13 @@ const MainApp: React.FC = () => {
 
         {currentView === 'results-reveal' && selectedGameId && dataLoaded && (
           <ResultsReveal results={results} onClose={goBackToDashboard} />
+        )}
+
+        {currentView === 'client-tasks' && selectedGameId && dataLoaded && (
+          <div className="w-full max-w-[98vw] h-[80vh] glass-panel rounded-3xl overflow-hidden border-t-8 border-t-orange-600 flex flex-col shadow-[0_40px_80px_rgba(0,0,0,0.7)] relative">
+            <BackButton />
+            <ClientHub tasks={tasks} photos={photos} gameId={selectedGameId} gameName={gameName} />
+          </div>
         )}
 
         {currentView === 'admin' && selectedGameId && dataLoaded && (

@@ -359,18 +359,20 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
                                         loading="lazy"
                                     />
-                                    {/* Hide/show toggle */}
-                                    <button
-                                        onClick={e => { e.stopPropagation(); toggleHidden(photo.id); }}
-                                        className={`absolute top-2 left-2 w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all border ${
-                                            isHidden
-                                                ? 'bg-red-600/80 border-red-500 text-white opacity-100'
-                                                : 'bg-black/60 border-zinc-600 text-white opacity-0 group-hover:opacity-100'
-                                        }`}
-                                        title={isHidden ? 'Vis billede' : 'Skjul billede'}
+                                    {/* Hide/show toggle — always visible, large click target */}
+                                    <div
+                                        className="absolute top-0 left-0 z-10 p-1.5"
+                                        onClick={e => { e.preventDefault(); e.stopPropagation(); toggleHidden(photo.id); }}
+                                        onPointerDown={e => e.stopPropagation()}
                                     >
-                                        {isHidden ? '👁' : '✕'}
-                                    </button>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold cursor-pointer transition-all ${
+                                            isHidden
+                                                ? 'bg-red-600 text-white shadow-lg'
+                                                : 'bg-black/70 text-zinc-300 hover:bg-red-600 hover:text-white'
+                                        }`}>
+                                            {isHidden ? '👁' : '✕'}
+                                        </div>
+                                    </div>
                                     {/* Selection indicator */}
                                     {selectMode && !isHidden && (
                                         <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${

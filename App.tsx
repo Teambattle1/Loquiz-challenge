@@ -137,9 +137,9 @@ const App: React.FC = () => {
 
   // Back button used by sub-views
   const BackButton = () => (
-    <div className="fixed top-8 left-8 z-50">
-      <button onClick={goBackToDashboard} className="p-3 bg-black/60 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl">
-        <HouseIcon className="w-6 h-6 md:w-8 md:h-8" />
+    <div className="fixed top-3 left-3 z-50">
+      <button onClick={goBackToDashboard} className="p-2.5 bg-black/80 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl backdrop-blur-sm">
+        <HouseIcon className="w-5 h-5 md:w-6 md:h-6" />
       </button>
     </div>
   );

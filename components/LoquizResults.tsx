@@ -83,9 +83,9 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
 
     if (!results || results.length === 0) return (
         <div className="w-full flex flex-col items-center pt-32 px-4 animate-fade-in">
-            <div className="fixed top-8 left-8 z-50">
-                <button onClick={onBack} className="p-3 bg-black/60 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl">
-                    <HouseIcon className="w-6 h-6 md:w-8 md:h-8" />
+            <div className="fixed top-3 left-3 z-50">
+                <button onClick={onBack} className="p-2.5 bg-black/80 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl backdrop-blur-sm">
+                    <HouseIcon className="w-5 h-5 md:w-6 md:h-6" />
                 </button>
             </div>
             <div className="text-center glass-panel p-12 rounded-3xl border border-white/5 max-w-2xl">
@@ -103,9 +103,9 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
         <div className="w-full max-w-full px-2 md:px-4 flex flex-col items-center relative z-10 h-full pt-20 md:pt-24">
             {liveEvent && <LiveToast message={liveEvent.message} subtext={liveEvent.subtext} />}
 
-            <div className="fixed top-8 left-8 z-50">
-                <button onClick={onBack} className="p-3 bg-black/60 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl">
-                    <HouseIcon className="w-6 h-6 md:w-8 md:h-8" />
+            <div className="fixed top-3 left-3 z-50">
+                <button onClick={onBack} className="p-2.5 bg-black/80 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl backdrop-blur-sm">
+                    <HouseIcon className="w-5 h-5 md:w-6 md:h-6" />
                 </button>
             </div>
 

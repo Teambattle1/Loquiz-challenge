@@ -73,6 +73,12 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         }).catch(() => {});
         return () => {
             audio.pause(); audio.src = ''; audioRef.current = null;
+            // Also stop winner-reveal.mp3 if playing
+            if (winnerAudioRef.current) {
+                winnerAudioRef.current.pause();
+                winnerAudioRef.current.src = '';
+                winnerAudioRef.current = null;
+            }
             try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch {}
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps

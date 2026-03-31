@@ -418,7 +418,7 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                     </div>
                 )}
 
-                {/* Current card (center, full size, orange border) */}
+                {/* Current card (center, orange frame tight around photo) */}
                 <div
                     key={`card-${currentIndex}-${currentPhoto.id}`}
                     className="absolute inset-0 flex items-center justify-center z-20"
@@ -426,14 +426,17 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                         animation: 'cardSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
                     }}
                 >
-                    <div className="relative" style={{ width: '70vw', maxHeight: '85vh' }}>
-                        <img
-                            src={currentPhoto.url}
-                            alt="Game Photo"
-                            className="w-full h-auto max-h-[85vh] object-contain rounded-2xl border-4 border-orange-500 shadow-[0_0_60px_rgba(234,88,12,0.3),0_20px_80px_rgba(0,0,0,0.9)]"
-                        />
-                        {/* Caption */}
-                        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl border border-orange-500/30 text-center max-w-[80%]">
+                    <div className="relative inline-flex flex-col items-center">
+                        {/* Orange frame wrapper — hugs the image tightly */}
+                        <div className="p-2 bg-orange-500 rounded-2xl shadow-[0_0_80px_rgba(234,88,12,0.4),0_20px_80px_rgba(0,0,0,0.9)] inline-block">
+                            <img
+                                src={currentPhoto.url}
+                                alt="Game Photo"
+                                className="block max-h-[78vh] max-w-[85vw] object-contain rounded-xl"
+                            />
+                        </div>
+                        {/* Caption below frame */}
+                        <div className="mt-3 bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl border border-orange-500/30 text-center max-w-[80vw]">
                             {currentPhoto.teamName && (
                                 <p className="text-orange-400 font-black text-xl md:text-3xl uppercase tracking-wide leading-none mb-1">{currentPhoto.teamName}</p>
                             )}

@@ -131,14 +131,47 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         } catch {}
     }, []);
 
+    // Resume winner.mp3 with fade-in after fanfare
+    const resumeBgMusic = useCallback(() => {
+        const audio = audioRef.current;
+        if (audio && audio.paused) {
+            audio.volume = 0;
+            audio.play().then(() => {
+                setMusicPlaying(true);
+                fadeAudio(audio, 0, TARGET_VOL, 2000);
+            }).catch(() => {});
+        } else if (audio) {
+            fadeAudio(audio, audio.volume, TARGET_VOL, 2000);
+        }
+    }, [fadeAudio]);
+
+    // Duck (fade out) winner.mp3 for fanfare, then bring it back
+    const duckForFanfare = useCallback((durationMs: number) => {
+        const audio = audioRef.current;
+        if (audio && !audio.paused) {
+            fadeAudio(audio, audio.volume, 0, 500).then(() => {
+                // Resume after fanfare ends
+                setTimeout(resumeBgMusic, durationMs);
+            });
+        }
+    }, [fadeAudio, resumeBgMusic]);
+
     const revealNext = () => {
         if (revealedCount < totalTeams) {
             const positionBeingRevealed = totalTeams - revealedCount;
             if (positionBeingRevealed <= 3) {
-                playFanfare(positionBeingRevealed as 1 | 2 | 3);
                 setJustRevealedPos(positionBeingRevealed);
-                // Clear animation after 2s
                 setTimeout(() => setJustRevealedPos(null), 2000);
+
+                if (positionBeingRevealed === 1) {
+                    // #1: stop bg music fully, play big fanfare
+                    stopMusic();
+                    playFanfare(1);
+                } else {
+                    // #3 or #2: duck bg music, play tone, resume after
+                    duckForFanfare(1500);
+                    playFanfare(positionBeingRevealed as 2 | 3);
+                }
             }
             setRevealedCount(prev => prev + 1);
         }
@@ -174,9 +207,8 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             }, 100);
 
             if (count >= revealsToTop3) {
-                // Stop at top 3 — fade out music, user clicks manually for dramatic reveal
+                // Stop at top 3 — music keeps playing, user clicks for dramatic reveal
                 setAutoRevealing(false);
-                stopMusic();
                 return;
             }
             // 4 seconds between each reveal

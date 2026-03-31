@@ -3,9 +3,12 @@ import { GamePhoto } from '../types';
 import MusicConfig from './MusicConfig';
 import { useMusicPlayer } from '../hooks/useMusicPlayer';
 import { getShowtimePlaylistId } from '../services/musicService';
+import { saveGallery, getGalleryShareUrl } from '../services/galleryService';
 
 interface ShowtimeProps {
   photos: GamePhoto[];
+  gameId?: string;
+  gameName?: string;
   onClose: () => void;
   onShowtimeComplete?: () => void;
 }
@@ -17,7 +20,13 @@ const getStoredDuration = (): number => {
     return val ? parseInt(val, 10) : 5;
 };
 
-const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
+const HIDDEN_KEY = 'loquiz_hidden_photos';
+const getStoredHidden = (): Set<string> => {
+    try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); }
+    catch { return new Set(); }
+};
+
+const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: ShowtimeProps) => {
     const [view, setView] = useState<'grid' | 'slideshow' | 'countdown'>('grid');
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
@@ -28,21 +37,51 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
     const [slideDuration, setSlideDuration] = useState(getStoredDuration);
     const [showDurationPicker, setShowDurationPicker] = useState(false);
     const [countdownProgress, setCountdownProgress] = useState(0);
+    const [hiddenIds, setHiddenIds] = useState<Set<string>>(getStoredHidden);
+    const [shareMsg, setShareMsg] = useState<string | null>(null);
     const [preloadDone, setPreloadDone] = useState(false);
     const music = useMusicPlayer();
     const showtimeCompleteTriggered = useRef(false);
 
-    // Slideshow photos — selected subset or all
+    // Slideshow photos — selected subset or all visible (excluding hidden)
     const slideshowPhotos = useMemo(() => {
-        if (selectedIds.size === 0) return photos;
-        return photos.filter(p => selectedIds.has(p.id));
-    }, [photos, selectedIds]);
+        const visible = photos.filter(p => !hiddenIds.has(p.id));
+        if (selectedIds.size === 0) return visible;
+        return visible.filter(p => selectedIds.has(p.id));
+    }, [photos, selectedIds, hiddenIds]);
 
     // Save duration to localStorage
     const changeDuration = (sec: number) => {
         setSlideDuration(sec);
         localStorage.setItem(DURATION_KEY, String(sec));
         setShowDurationPicker(false);
+    };
+
+    // Toggle photo visibility (hide/show)
+    const toggleHidden = (id: string) => {
+        setHiddenIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]));
+            return next;
+        });
+    };
+
+    // Visible photos (not hidden)
+    const visiblePhotos = useMemo(() => photos.filter(p => !hiddenIds.has(p.id)), [photos, hiddenIds]);
+
+    // Share gallery link — saves to Supabase and copies link
+    const shareGallery = async () => {
+        if (!gameId) return;
+        await saveGallery(gameId, gameName || null, photos, [...hiddenIds]);
+        const url = getGalleryShareUrl(gameId);
+        try {
+            await navigator.clipboard.writeText(url);
+            setShareMsg('Link kopieret!');
+        } catch {
+            setShareMsg(url);
+        }
+        setTimeout(() => setShareMsg(null), 4000);
     };
 
     // Preload images and show countdown
@@ -214,11 +253,18 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                             Showtime Gallery
                         </h2>
                         <p className="text-zinc-400 text-xs font-mono uppercase tracking-wide">
-                            {photos.length} Photos
+                            {visiblePhotos.length} / {photos.length} Photos
+                            {hiddenIds.size > 0 && <span className="text-red-400 ml-2">• {hiddenIds.size} Hidden</span>}
                             {selectedIds.size > 0 && <span className="text-orange-400 ml-2">• {selectedIds.size} Selected</span>}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
+                        {/* Share gallery */}
+                        {gameId && (
+                            <button onClick={shareGallery} className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white hover:border-zinc-500 transition-all">
+                                🔗 Del galleri
+                            </button>
+                        )}
                         {/* MUSIK */}
                         <button onClick={() => setShowMusicConfig(true)} className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white hover:border-zinc-500 transition-all">
                             ♪ Musik
@@ -293,17 +339,19 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {photos.map((photo, idx) => {
                             const isSelected = selectedIds.has(photo.id);
+                            const isHidden = hiddenIds.has(photo.id);
                             return (
                                 <div
                                     key={photo.id}
                                     className={`aspect-square relative group cursor-pointer rounded-lg overflow-hidden transition-all hover:scale-105 hover:z-10 bg-zinc-900 ${
+                                        isHidden ? 'opacity-30 border-2 border-red-500/30' :
                                         selectMode && isSelected
                                             ? 'border-2 border-orange-500 shadow-[0_0_20px_rgba(234,88,12,0.3)]'
                                             : selectMode
                                             ? 'border-2 border-zinc-700/50 opacity-60 hover:opacity-100'
                                             : 'border border-white/10 hover:border-orange-500/50'
                                     }`}
-                                    onClick={() => selectMode ? toggleSelect(photo.id) : enterSlideshow(idx)}
+                                    onClick={() => selectMode ? toggleSelect(photo.id) : !isHidden ? enterSlideshow(idx) : undefined}
                                 >
                                     <img
                                         src={photo.thumbnailUrl || photo.url}
@@ -311,8 +359,20 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
                                         loading="lazy"
                                     />
+                                    {/* Hide/show toggle */}
+                                    <button
+                                        onClick={e => { e.stopPropagation(); toggleHidden(photo.id); }}
+                                        className={`absolute top-2 left-2 w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all border ${
+                                            isHidden
+                                                ? 'bg-red-600/80 border-red-500 text-white opacity-100'
+                                                : 'bg-black/60 border-zinc-600 text-white opacity-0 group-hover:opacity-100'
+                                        }`}
+                                        title={isHidden ? 'Vis billede' : 'Skjul billede'}
+                                    >
+                                        {isHidden ? '👁' : '✕'}
+                                    </button>
                                     {/* Selection indicator */}
-                                    {selectMode && (
+                                    {selectMode && !isHidden && (
                                         <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                                             isSelected ? 'bg-orange-500 border-orange-400' : 'bg-black/50 border-zinc-500'
                                         }`}>
@@ -323,17 +383,31 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                                             )}
                                         </div>
                                     )}
+                                    {/* Hidden overlay */}
+                                    {isHidden && (
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                            <span className="text-red-400 text-xs font-bold uppercase tracking-wider">Skjult</span>
+                                        </div>
+                                    )}
                                     {/* Hover overlay */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
-                                        <span className="text-white text-[10px] font-bold uppercase truncate">{photo.teamName || 'Unknown Team'}</span>
-                                        <span className="text-orange-400 text-[9px] uppercase truncate">{photo.taskTitle}</span>
-                                    </div>
+                                    {!isHidden && (
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                                            <span className="text-white text-[10px] font-bold uppercase truncate">{photo.teamName || 'Unknown Team'}</span>
+                                            <span className="text-orange-400 text-[9px] uppercase truncate">{photo.taskTitle}</span>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
                 <MusicConfig open={showMusicConfig} onClose={() => setShowMusicConfig(false)} />
+                {/* Share message toast */}
+                {shareMsg && (
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full font-bold text-sm uppercase tracking-wider shadow-2xl z-[70] animate-fade-in">
+                        {shareMsg}
+                    </div>
+                )}
             </div>
         );
     }

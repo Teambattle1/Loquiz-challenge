@@ -8,6 +8,7 @@ import TaskMaster from './components/TaskMaster';
 import TaskInspector from './components/TaskInspector';
 import Timeline from './components/Timeline';
 import ResultsReveal from './components/ResultsReveal';
+import PublicGallery from './components/PublicGallery';
 import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
 import { PlayerResult, GameTask, GamePhoto } from './types';
 import { HouseIcon } from './components/icons';
@@ -18,8 +19,26 @@ type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'tas
 // PASTE YOUR API KEY HERE - Leave empty to use manual input
 const HARDCODED_API_KEY: string = "ApiKey-v1 63f6bec47b2cc86eb52ea7d84f2f96e250ab87544074cec8949d5862d368c154";
 
+// Check for ?gallery=GAMEID in URL
+const getGalleryIdFromUrl = (): string | null => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('gallery');
+};
+
 const App: React.FC = () => {
+  const [galleryId] = useState<string | null>(getGalleryIdFromUrl);
+
+  // If ?gallery=GAMEID, show public gallery directly
+  if (galleryId) {
+    return <PublicGallery gameId={galleryId} />;
+  }
+
+  return <MainApp />;
+};
+
+const MainApp: React.FC = () => {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [gameName, setGameName] = useState<string | null>(null);
 
   // Initialize key with hardcoded value or from localStorage
   const [apiKey, setApiKey] = useState<string | null>(() => {
@@ -51,6 +70,7 @@ const App: React.FC = () => {
       ]);
       setResults(resultsData);
       setPhotos(photosData);
+      setGameName(info.name || null);
 
       let finalTasks: GameTask[] = taskList.length > 0 ? taskList : [];
       if (finalTasks.length === 0 && info.tasks && Array.isArray(info.tasks)) {
@@ -174,7 +194,7 @@ const App: React.FC = () => {
 
         {currentView === 'showtime' && selectedGameId && (
           <div className="w-full">
-            <Showtime photos={photos} onClose={goBackToDashboard} onShowtimeComplete={handleShowtimeComplete} />
+            <Showtime photos={photos} gameId={selectedGameId || undefined} gameName={gameName || undefined} onClose={goBackToDashboard} onShowtimeComplete={handleShowtimeComplete} />
           </div>
         )}
 

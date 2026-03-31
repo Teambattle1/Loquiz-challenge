@@ -92,6 +92,11 @@ body::after {
   background: rgba(245, 158, 11, 0.9);
 }
 
+/* Auto-rotate images based on EXIF orientation data */
+img {
+  image-orientation: from-image;
+}
+
 /* Dark Glass Panel */
 .glass-panel {
   background: rgba(20, 20, 20, 0.7);

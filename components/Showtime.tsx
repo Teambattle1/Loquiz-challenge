@@ -11,17 +11,10 @@ interface ShowtimeProps {
 }
 
 const DURATION_KEY = 'loquiz_slideshow_duration';
-const ROTATION_KEY = 'loquiz_photo_rotations';
 
 const getStoredDuration = (): number => {
     const val = localStorage.getItem(DURATION_KEY);
     return val ? parseInt(val, 10) : 5;
-};
-
-const getStoredRotations = (): Record<string, number> => {
-    try {
-        return JSON.parse(localStorage.getItem(ROTATION_KEY) || '{}');
-    } catch { return {}; }
 };
 
 const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
@@ -34,7 +27,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
     const [isShowtimeMode, setIsShowtimeMode] = useState(false);
     const [slideDuration, setSlideDuration] = useState(getStoredDuration);
     const [showDurationPicker, setShowDurationPicker] = useState(false);
-    const [rotations, setRotations] = useState<Record<string, number>>(getStoredRotations);
     const [countdownProgress, setCountdownProgress] = useState(0);
     const [preloadDone, setPreloadDone] = useState(false);
     const music = useMusicPlayer();
@@ -51,15 +43,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
         setSlideDuration(sec);
         localStorage.setItem(DURATION_KEY, String(sec));
         setShowDurationPicker(false);
-    };
-
-    // Rotate a photo 90° clockwise
-    const rotatePhoto = (id: string) => {
-        setRotations(prev => {
-            const next = { ...prev, [id]: ((prev[id] || 0) + 90) % 360 };
-            localStorage.setItem(ROTATION_KEY, JSON.stringify(next));
-            return next;
-        });
     };
 
     // Preload images and show countdown
@@ -126,10 +109,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                 if (e.key === 'ArrowRight') setCurrentIndex(prev => (prev + 1) % slideshowPhotos.length);
                 if (e.key === 'ArrowLeft') setCurrentIndex(prev => (prev - 1 + slideshowPhotos.length) % slideshowPhotos.length);
                 if (e.key === ' ') { e.preventDefault(); setIsPlaying(prev => !prev); }
-                if (e.key === 'r' || e.key === 'R') {
-                    const photo = slideshowPhotos[currentIndex];
-                    if (photo) rotatePhoto(photo.id);
-                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -310,7 +289,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {photos.map((photo, idx) => {
                             const isSelected = selectedIds.has(photo.id);
-                            const rot = rotations[photo.id] || 0;
                             return (
                                 <div
                                     key={photo.id}
@@ -327,17 +305,8 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                                         src={photo.thumbnailUrl || photo.url}
                                         alt="Thumbnail"
                                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
-                                        style={rot ? { transform: `rotate(${rot}deg)`, transformOrigin: 'center' } : undefined}
                                         loading="lazy"
                                     />
-                                    {/* Rotate button */}
-                                    <button
-                                        onClick={e => { e.stopPropagation(); rotatePhoto(photo.id); }}
-                                        className="absolute top-2 left-2 w-6 h-6 bg-black/60 hover:bg-orange-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-xs border border-zinc-600"
-                                        title="Rotate 90°"
-                                    >
-                                        ↻
-                                    </button>
                                     {/* Selection indicator */}
                                     {selectMode && (
                                         <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
@@ -348,12 +317,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                                                     <polyline points="20 6 9 17 4 12" />
                                                 </svg>
                                             )}
-                                        </div>
-                                    )}
-                                    {/* Rotation badge */}
-                                    {rot > 0 && (
-                                        <div className="absolute bottom-2 left-2 bg-orange-600/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                            {rot}°
                                         </div>
                                     )}
                                     {/* Hover overlay */}
@@ -378,9 +341,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
     const nextIdx = (currentIndex + 1) % slideshowPhotos.length;
     const prevPhoto = slideshowPhotos.length > 1 && prevIdx !== currentIndex ? slideshowPhotos[prevIdx] : null;
     const nextPhoto = slideshowPhotos.length > 1 && nextIdx !== currentIndex ? slideshowPhotos[nextIdx] : null;
-    const currentRotation = rotations[currentPhoto.id] || 0;
-    const prevRotation = prevPhoto ? (rotations[prevPhoto.id] || 0) : 0;
-    const nextRotation = nextPhoto ? (rotations[nextPhoto.id] || 0) : 0;
 
     return (
         <div className="fixed inset-0 z-50 bg-black text-white flex flex-col">
@@ -396,7 +356,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                     </span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={() => rotatePhoto(currentPhoto.id)} className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-zinc-800/80 text-zinc-400 border border-zinc-700 hover:text-white transition-all">↻</button>
                     <button
                         onClick={() => setIsPlaying(!isPlaying)}
                         className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all ${isPlaying ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}
@@ -430,7 +389,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                                 src={prevPhoto.url}
                                 alt="Previous"
                                 className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
-                                style={prevRotation ? { transform: `rotate(${prevRotation}deg)` } : undefined}
                             />
                         </div>
                     </div>
@@ -455,7 +413,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                                 src={nextPhoto.url}
                                 alt="Next"
                                 className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
-                                style={nextRotation ? { transform: `rotate(${nextRotation}deg)` } : undefined}
                             />
                         </div>
                     </div>
@@ -474,7 +431,6 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                             src={currentPhoto.url}
                             alt="Game Photo"
                             className="w-full h-auto max-h-[85vh] object-contain rounded-2xl border-4 border-orange-500 shadow-[0_0_60px_rgba(234,88,12,0.3),0_20px_80px_rgba(0,0,0,0.9)]"
-                            style={currentRotation ? { transform: `rotate(${currentRotation}deg)` } : undefined}
                         />
                         {/* Caption */}
                         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl border border-orange-500/30 text-center max-w-[80%]">

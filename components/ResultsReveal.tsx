@@ -88,8 +88,21 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     const [autoRevealing, setAutoRevealing] = useState(false);
     const autoRevealRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Fanfare sound for top 3 using Web Audio API
+    const winnerAudioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Fanfare sound for top 3
     const playFanfare = useCallback((place: 1 | 2 | 3) => {
+        if (place === 1) {
+            // #1 Winner: play the real fanfare MP3 at 75%
+            try {
+                const audio = new Audio('/winner-reveal.mp3');
+                audio.volume = 0.75;
+                audio.play();
+                winnerAudioRef.current = audio;
+            } catch {}
+            return;
+        }
+        // #2 and #3: synthesized tones
         try {
             const ctx = new AudioContext();
             const now = ctx.currentTime;
@@ -97,14 +110,12 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             gain.connect(ctx.destination);
             gain.gain.setValueAtTime(0.15, now);
 
-            // Different note sequences for each place
             const sequences: Record<number, number[]> = {
                 3: [330, 392, 440],           // Bronze: E4 G4 A4
                 2: [392, 494, 587],           // Silver: G4 B4 D5
-                1: [523, 659, 784, 1047],     // Gold: C5 E5 G5 C6
             };
             const notes = sequences[place];
-            const noteLen = place === 1 ? 0.3 : 0.25;
+            const noteLen = 0.25;
 
             notes.forEach((freq, i) => {
                 const osc = ctx.createOscillator();
@@ -115,7 +126,6 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                 osc.stop(now + i * noteLen + noteLen * 1.5);
             });
 
-            // Fade out
             const totalLen = notes.length * noteLen + noteLen;
             gain.gain.linearRampToValueAtTime(0, now + totalLen + 0.5);
         } catch {}

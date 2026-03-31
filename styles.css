@@ -40,6 +40,18 @@ body::after {
   animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Podium reveal zoom animation for top 3 */
+@keyframes podiumReveal {
+  0% { transform: scale(0.8); opacity: 0; }
+  30% { transform: scale(1.08); opacity: 1; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+.podium-reveal {
+  animation: podiumReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 10;
+}
+
 /* Card deck swipe animation */
 @keyframes cardSlideIn {
   from {

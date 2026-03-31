@@ -19,6 +19,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     const totalTeams = sortedResults.length;
 
     const [revealedCount, setRevealedCount] = useState(0);
+    const [justRevealedPos, setJustRevealedPos] = useState<number | null>(null);
     const listRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [musicPlaying, setMusicPlaying] = useState(false);
@@ -87,8 +88,48 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     const [autoRevealing, setAutoRevealing] = useState(false);
     const autoRevealRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Fanfare sound for top 3 using Web Audio API
+    const playFanfare = useCallback((place: 1 | 2 | 3) => {
+        try {
+            const ctx = new AudioContext();
+            const now = ctx.currentTime;
+            const gain = ctx.createGain();
+            gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.15, now);
+
+            // Different note sequences for each place
+            const sequences: Record<number, number[]> = {
+                3: [330, 392, 440],           // Bronze: E4 G4 A4
+                2: [392, 494, 587],           // Silver: G4 B4 D5
+                1: [523, 659, 784, 1047],     // Gold: C5 E5 G5 C6
+            };
+            const notes = sequences[place];
+            const noteLen = place === 1 ? 0.3 : 0.25;
+
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.value = freq;
+                osc.connect(gain);
+                osc.start(now + i * noteLen);
+                osc.stop(now + i * noteLen + noteLen * 1.5);
+            });
+
+            // Fade out
+            const totalLen = notes.length * noteLen + noteLen;
+            gain.gain.linearRampToValueAtTime(0, now + totalLen + 0.5);
+        } catch {}
+    }, []);
+
     const revealNext = () => {
         if (revealedCount < totalTeams) {
+            const positionBeingRevealed = totalTeams - revealedCount;
+            if (positionBeingRevealed <= 3) {
+                playFanfare(positionBeingRevealed as 1 | 2 | 3);
+                setJustRevealedPos(positionBeingRevealed);
+                // Clear animation after 2s
+                setTimeout(() => setJustRevealedPos(null), 2000);
+            }
             setRevealedCount(prev => prev + 1);
         }
     };
@@ -128,8 +169,8 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                 stopMusic();
                 return;
             }
-            // Fast interval: 600ms per team
-            autoRevealRef.current = setTimeout(doNext, 600);
+            // 4 seconds between each reveal
+            autoRevealRef.current = setTimeout(doNext, 4000);
         };
         doNext();
     };
@@ -188,6 +229,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                         const revealed = isRevealed(player.position);
                         const isTop3 = player.position <= 3;
                         const style = isTop3 ? medalStyles[player.position] : null;
+                        const isAnimating = justRevealedPos === player.position;
 
                         return (
                             <div
@@ -198,7 +240,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                                             ? `${style!.bg} ${style!.border} ${style!.glow}`
                                             : 'bg-zinc-900/40 border-zinc-800/50'
                                         : 'bg-zinc-900/20 border-zinc-800/20'
-                                }`}
+                                } ${isAnimating ? 'podium-reveal' : ''}`}
                             >
                                 {/* Rank */}
                                 <div className={`text-3xl md:text-5xl font-black w-16 md:w-20 text-center shrink-0 transition-all duration-700 ${

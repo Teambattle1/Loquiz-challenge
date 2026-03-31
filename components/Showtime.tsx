@@ -161,6 +161,8 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
     const startShowtime = () => {
         showtimeCompleteTriggered.current = false;
         setIsShowtimeMode(true);
+        // Request fullscreen for big-screen presentation
+        try { document.documentElement.requestFullscreen?.(); } catch {}
         const doStart = () => {
             setCurrentIndex(0);
             setView('slideshow');
@@ -372,9 +374,12 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
     // ─── Card-deck slideshow view ─────────────────────────────────
     const currentPhoto = slideshowPhotos[currentIndex];
     if (!currentPhoto) return null;
+    const prevIdx = (currentIndex - 1 + slideshowPhotos.length) % slideshowPhotos.length;
     const nextIdx = (currentIndex + 1) % slideshowPhotos.length;
-    const nextPhoto = slideshowPhotos.length > 1 ? slideshowPhotos[nextIdx] : null;
+    const prevPhoto = slideshowPhotos.length > 1 && prevIdx !== currentIndex ? slideshowPhotos[prevIdx] : null;
+    const nextPhoto = slideshowPhotos.length > 1 && nextIdx !== currentIndex ? slideshowPhotos[nextIdx] : null;
     const currentRotation = rotations[currentPhoto.id] || 0;
+    const prevRotation = prevPhoto ? (rotations[prevPhoto.id] || 0) : 0;
     const nextRotation = nextPhoto ? (rotations[nextPhoto.id] || 0) : 0;
 
     return (
@@ -403,35 +408,60 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
             </div>
 
             {/* Card deck area — full screen */}
-            <div className="flex-grow relative overflow-hidden" style={{ perspective: '1200px' }}>
-                {/* Next card (peeking from right, tilted) */}
-                {nextPhoto && nextIdx !== currentIndex && (
+            <div className="flex-grow relative overflow-hidden" style={{ perspective: '1400px' }}>
+
+                {/* Previous card (left side, blurred, fading out) */}
+                {prevPhoto && (
                     <div
-                        className="absolute inset-0 flex items-center justify-end pr-[2vw] z-10 pointer-events-none"
-                        style={{ perspective: '1200px' }}
+                        key={`prev-${prevIdx}`}
+                        className="absolute inset-0 flex items-center justify-start pl-[2vw] z-5 pointer-events-none"
                     >
                         <div
-                            className="relative"
                             style={{
-                                width: '70vw',
-                                maxHeight: '80vh',
-                                transform: 'translateX(25vw) rotateY(-8deg) scale(0.85)',
+                                width: '55vw',
+                                maxHeight: '75vh',
+                                transform: 'translateX(-20vw) rotateY(6deg) scale(0.75)',
+                                transformOrigin: 'right center',
+                                opacity: 0.3,
+                                filter: 'blur(6px)',
+                            }}
+                        >
+                            <img
+                                src={prevPhoto.url}
+                                alt="Previous"
+                                className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
+                                style={prevRotation ? { transform: `rotate(${prevRotation}deg)` } : undefined}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Next card (right side, tilted, blurred) */}
+                {nextPhoto && (
+                    <div
+                        className="absolute inset-0 flex items-center justify-end pr-[2vw] z-10 pointer-events-none"
+                    >
+                        <div
+                            style={{
+                                width: '55vw',
+                                maxHeight: '75vh',
+                                transform: 'translateX(20vw) rotateY(-6deg) scale(0.75)',
                                 transformOrigin: 'left center',
-                                opacity: 0.5,
-                                transition: 'all 0.4s ease',
+                                opacity: 0.3,
+                                filter: 'blur(4px)',
                             }}
                         >
                             <img
                                 src={nextPhoto.url}
                                 alt="Next"
-                                className="w-full h-auto max-h-[80vh] object-contain rounded-xl border border-white/5"
+                                className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
                                 style={nextRotation ? { transform: `rotate(${nextRotation}deg)` } : undefined}
                             />
                         </div>
                     </div>
                 )}
 
-                {/* Current card (center, full size, animated) */}
+                {/* Current card (center, full size, orange border) */}
                 <div
                     key={`card-${currentIndex}-${currentPhoto.id}`}
                     className="absolute inset-0 flex items-center justify-center z-20"
@@ -439,15 +469,15 @@ const Showtime = ({ photos, onClose, onShowtimeComplete }: ShowtimeProps) => {
                         animation: 'cardSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
                     }}
                 >
-                    <div className="relative" style={{ width: '85vw', maxHeight: '85vh' }}>
+                    <div className="relative" style={{ width: '70vw', maxHeight: '85vh' }}>
                         <img
                             src={currentPhoto.url}
                             alt="Game Photo"
-                            className="w-full h-auto max-h-[85vh] object-contain rounded-xl shadow-[0_20px_80px_rgba(0,0,0,0.9)] border border-white/10"
+                            className="w-full h-auto max-h-[85vh] object-contain rounded-2xl border-4 border-orange-500 shadow-[0_0_60px_rgba(234,88,12,0.3),0_20px_80px_rgba(0,0,0,0.9)]"
                             style={currentRotation ? { transform: `rotate(${currentRotation}deg)` } : undefined}
                         />
                         {/* Caption */}
-                        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 text-center max-w-[80%]">
+                        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl border border-orange-500/30 text-center max-w-[80%]">
                             {currentPhoto.teamName && (
                                 <p className="text-orange-400 font-black text-xl md:text-3xl uppercase tracking-wide leading-none mb-1">{currentPhoto.teamName}</p>
                             )}

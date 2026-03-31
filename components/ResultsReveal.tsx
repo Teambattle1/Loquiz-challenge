@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PlayerResult } from '../types';
 import { TrophyIcon } from './icons';
 import { useMusicPlayer } from '../hooks/useMusicPlayer';
@@ -23,15 +23,30 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     // revealedCount: how many teams are revealed (from bottom up)
     const [revealedCount, setRevealedCount] = useState(0);
     const music = useMusicPlayer();
+    const listRef = useRef<HTMLDivElement>(null);
 
-    // Start results music on mount
+    // Request fullscreen + start music on mount
     useEffect(() => {
+        // Fullscreen
+        try { document.documentElement.requestFullscreen?.(); } catch {}
+        // Music
         const playlistId = getResultsPlaylistId();
+        console.log('[ResultsReveal] Starting music, playlistId:', playlistId);
         if (playlistId) {
             music.playPlaylist(playlistId);
         }
-        return () => { music.stop(); };
+        return () => {
+            music.stop();
+            try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch {}
+        };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Scroll to bottom on mount so last-place team is visible first
+    useEffect(() => {
+        setTimeout(() => {
+            listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+        }, 300);
+    }, []);
 
     const revealNext = () => {
         if (revealedCount < totalTeams) {
@@ -75,7 +90,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             </div>
 
             {/* Results list */}
-            <div className="flex-grow overflow-y-auto px-4 md:px-8 py-6">
+            <div ref={listRef} className="flex-grow overflow-y-auto px-4 md:px-8 py-6">
                 <div className="max-w-5xl mx-auto space-y-3">
                     {sortedResults.map(player => {
                         const revealed = isRevealed(player.position);

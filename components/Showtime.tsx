@@ -84,61 +84,94 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
         setTimeout(() => setShareMsg(null), 4000);
     };
 
-    // Preload images and show countdown
+    // Preload all media (images AND videos) before starting slideshow
     const preloadAndStart = useCallback((startFn: () => void) => {
-        const toPreload = slideshowPhotos.map(p => p.url);
-        if (toPreload.length === 0) { startFn(); return; }
+        const items = slideshowPhotos.map(p => ({ url: p.url, isVideo: p.mediaType === 'video' }));
+        if (items.length === 0) { startFn(); return; }
 
         setView('countdown');
         setPreloadDone(false);
         setCountdownProgress(0);
 
         let loaded = 0;
-        const total = toPreload.length;
+        const total = items.length;
 
         const checkDone = () => {
             loaded++;
             setCountdownProgress(loaded / total);
             if (loaded >= total) {
                 setPreloadDone(true);
-                // Short pause to show 100%, then start
                 setTimeout(startFn, 600);
             }
         };
 
-        toPreload.forEach(url => {
-            const img = new Image();
-            img.onload = checkDone;
-            img.onerror = checkDone;
-            img.src = url;
+        items.forEach(({ url, isVideo }) => {
+            if (isVideo) {
+                // Fetch entire video into browser cache so <video> plays instantly
+                fetch(url, { mode: 'cors', credentials: 'omit' })
+                    .then(res => res.blob())
+                    .then(() => checkDone())
+                    .catch(() => {
+                        // Fallback: hidden <video preload="auto">
+                        const v = document.createElement('video');
+                        v.preload = 'auto';
+                        v.muted = true;
+                        v.src = url;
+                        const done = () => { v.oncanplaythrough = null; v.onerror = null; checkDone(); };
+                        v.oncanplaythrough = done;
+                        v.onerror = done;
+                        // Safety timeout so a slow video never blocks start forever
+                        setTimeout(done, 8000);
+                    });
+            } else {
+                const img = new Image();
+                img.onload = checkDone;
+                img.onerror = checkDone;
+                img.src = url;
+            }
         });
     }, [slideshowPhotos]);
 
-    // Auto-play effect for slideshow
+    const currentVideoRef = useRef<HTMLVideoElement | null>(null);
+
+    const advance = useCallback(() => {
+        setCurrentIndex(prev => {
+            const next = prev + 1;
+            if (isShowtimeMode && next >= slideshowPhotos.length) {
+                if (!showtimeCompleteTriggered.current) {
+                    showtimeCompleteTriggered.current = true;
+                    setTimeout(() => onShowtimeComplete?.(), 500);
+                }
+                return prev;
+            }
+            if (isShowtimeMode && next === slideshowPhotos.length - 1) {
+                music.stop();
+            }
+            return next % slideshowPhotos.length;
+        });
+    }, [isShowtimeMode, slideshowPhotos.length, music, onShowtimeComplete]);
+
+    // Auto-play effect: images use slideDuration, videos play to their end
     useEffect(() => {
-        let interval: ReturnType<typeof setInterval> | undefined;
-        if (view === 'slideshow' && isPlaying && slideshowPhotos.length > 0) {
-            interval = setInterval(() => {
-                setCurrentIndex(prev => {
-                    const next = prev + 1;
-                    if (isShowtimeMode && next >= slideshowPhotos.length) {
-                        // Last photo done — transition to results
-                        if (!showtimeCompleteTriggered.current) {
-                            showtimeCompleteTriggered.current = true;
-                            setTimeout(() => onShowtimeComplete?.(), 500);
-                        }
-                        return prev;
-                    }
-                    // Start fading music when reaching the LAST photo
-                    if (isShowtimeMode && next === slideshowPhotos.length - 1) {
-                        music.stop(); // 5s fade-out starts while last photo is showing
-                    }
-                    return next % slideshowPhotos.length;
-                });
-            }, slideDuration * 1000);
+        if (view !== 'slideshow' || !isPlaying || slideshowPhotos.length === 0) return;
+        const current = slideshowPhotos[currentIndex];
+        if (!current) return;
+        // Videos advance via onEnded handler, not here
+        if (current.mediaType === 'video') return;
+        const timeout = setTimeout(advance, slideDuration * 1000);
+        return () => clearTimeout(timeout);
+    }, [isPlaying, view, currentIndex, slideshowPhotos, slideDuration, advance]);
+
+    // Pause/play current video in sync with isPlaying
+    useEffect(() => {
+        const v = currentVideoRef.current;
+        if (!v) return;
+        if (isPlaying) {
+            v.play().catch(() => {});
+        } else {
+            v.pause();
         }
-        return () => { if (interval) clearInterval(interval); };
-    }, [isPlaying, view, slideshowPhotos.length, isShowtimeMode, slideDuration, music, onShowtimeComplete]);
+    }, [isPlaying, currentIndex]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -353,12 +386,34 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                                     }`}
                                     onClick={() => selectMode ? toggleSelect(photo.id) : !isHidden ? enterSlideshow(idx) : undefined}
                                 >
-                                    <img
-                                        src={photo.thumbnailUrl || photo.url}
-                                        alt="Thumbnail"
-                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
-                                        loading="lazy"
-                                    />
+                                    {photo.mediaType === 'video' ? (
+                                        photo.thumbnailUrl ? (
+                                            <img
+                                                src={photo.thumbnailUrl}
+                                                alt="Video thumbnail"
+                                                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <video
+                                                src={photo.url}
+                                                muted
+                                                playsInline
+                                                preload="metadata"
+                                                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
+                                            />
+                                        )
+                                    ) : (
+                                        <img
+                                            src={photo.thumbnailUrl || photo.url}
+                                            alt="Thumbnail"
+                                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all"
+                                            loading="lazy"
+                                        />
+                                    )}
+                                    {photo.mediaType === 'video' && (
+                                        <div className="absolute bottom-1 right-1 z-10 bg-black/70 text-white text-[10px] font-bold uppercase px-1.5 py-0.5 rounded pointer-events-none">▶ Video</div>
+                                    )}
                                     {/* Hide/show toggle — always visible, large click target */}
                                     <div
                                         className="absolute top-0 left-0 z-10 p-1.5"
@@ -465,11 +520,20 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                                 filter: 'blur(6px)',
                             }}
                         >
-                            <img
-                                src={prevPhoto.url}
-                                alt="Previous"
-                                className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
-                            />
+                            {prevPhoto.mediaType === 'video' ? (
+                                <video
+                                    src={prevPhoto.url}
+                                    muted
+                                    playsInline
+                                    className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
+                                />
+                            ) : (
+                                <img
+                                    src={prevPhoto.thumbnailUrl || prevPhoto.url}
+                                    alt="Previous"
+                                    className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
+                                />
+                            )}
                         </div>
                     </div>
                 )}
@@ -489,11 +553,20 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                                 filter: 'blur(4px)',
                             }}
                         >
-                            <img
-                                src={nextPhoto.url}
-                                alt="Next"
-                                className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
-                            />
+                            {nextPhoto.mediaType === 'video' ? (
+                                <video
+                                    src={nextPhoto.url}
+                                    muted
+                                    playsInline
+                                    className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
+                                />
+                            ) : (
+                                <img
+                                    src={nextPhoto.thumbnailUrl || nextPhoto.url}
+                                    alt="Next"
+                                    className="w-full h-auto max-h-[75vh] object-contain rounded-xl border-2 border-orange-500/20"
+                                />
+                            )}
                         </div>
                     </div>
                 )}
@@ -507,13 +580,26 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                     }}
                 >
                     <div className="relative inline-flex flex-col items-center">
-                        {/* Orange frame wrapper — hugs the image tightly */}
+                        {/* Orange frame wrapper — hugs the media tightly */}
                         <div className="p-2 bg-orange-500 rounded-2xl shadow-[0_0_80px_rgba(234,88,12,0.4),0_20px_80px_rgba(0,0,0,0.9)] inline-block">
-                            <img
-                                src={currentPhoto.url}
-                                alt="Game Photo"
-                                className="block max-h-[78vh] max-w-[85vw] object-contain rounded-xl"
-                            />
+                            {currentPhoto.mediaType === 'video' ? (
+                                <video
+                                    ref={currentVideoRef}
+                                    key={`v-${currentPhoto.id}`}
+                                    src={currentPhoto.url}
+                                    autoPlay
+                                    playsInline
+                                    controls={false}
+                                    onEnded={advance}
+                                    className="block max-h-[78vh] max-w-[85vw] object-contain rounded-xl"
+                                />
+                            ) : (
+                                <img
+                                    src={currentPhoto.url}
+                                    alt="Game Photo"
+                                    className="block max-h-[78vh] max-w-[85vw] object-contain rounded-xl"
+                                />
+                            )}
                         </div>
                         {/* Caption below frame */}
                         <div className="mt-3 bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl border border-orange-500/30 text-center max-w-[80vw]">

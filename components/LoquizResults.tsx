@@ -26,6 +26,46 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
     const totalAnswerCountRef = useRef<number>(0);
     const isFirstLoadRef = useRef<boolean>(true);
 
+    const [columns, setColumns] = useState<1 | 2>(1);
+    const [hiddenPositions, setHiddenPositions] = useState<Set<number>>(new Set());
+    const [revealedPositions, setRevealedPositions] = useState<Set<number>>(new Set());
+
+    const toggleHidden = useCallback((pos: number) => {
+        setHiddenPositions(prev => {
+            const next = new Set(prev);
+            if (next.has(pos)) next.delete(pos);
+            else next.add(pos);
+            return next;
+        });
+        setRevealedPositions(prev => {
+            const next = new Set(prev);
+            next.delete(pos);
+            return next;
+        });
+    }, []);
+
+    const resetReveal = useCallback(() => {
+        setRevealedPositions(new Set());
+    }, []);
+
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.code !== 'Space') return;
+            const target = e.target as HTMLElement | null;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            e.preventDefault();
+            setRevealedPositions(prev => {
+                const pending = [...hiddenPositions].filter(p => !prev.has(p)).sort((a, b) => b - a);
+                if (pending.length === 0) return prev;
+                const next = new Set(prev);
+                next.add(pending[0]);
+                return next;
+            });
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [hiddenPositions]);
+
     const loadData = useCallback(async (isRefresh = false) => {
         if (!gameId) return;
         if (!isRefresh) setIsLoading(true);
@@ -109,31 +149,86 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
                 </button>
             </div>
 
-            <div className="w-full text-center mb-8">
+            <div className="w-full text-center mb-6">
                 <h1 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">Results</h1>
                 {gameName && <p className="text-sm md:text-lg text-orange-500 font-black uppercase tracking-[0.3em] mt-1">{gameName}</p>}
             </div>
 
-            {/* All teams in a single presentation-friendly list */}
-            <div className="w-full max-w-5xl space-y-3 mb-16">
+            {/* Controls */}
+            <div className="w-full max-w-5xl flex flex-wrap items-center justify-center gap-2 md:gap-3 mb-6">
+                <div className="flex items-center gap-1 bg-zinc-900/60 border border-zinc-800 rounded-lg p-1">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-2">Columns</span>
+                    {[1, 2].map((c) => (
+                        <button
+                            key={c}
+                            onClick={() => setColumns(c as 1 | 2)}
+                            className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all ${
+                                columns === c ? 'bg-orange-600 text-black' : 'text-zinc-400 hover:text-white'
+                            }`}
+                        >
+                            {c}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-1 bg-zinc-900/60 border border-zinc-800 rounded-lg p-1">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-2">Hide</span>
+                    {[1, 2, 3].map((pos) => {
+                        const active = hiddenPositions.has(pos);
+                        return (
+                            <button
+                                key={pos}
+                                onClick={() => toggleHidden(pos)}
+                                className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all ${
+                                    active ? 'bg-orange-600 text-black' : 'text-zinc-400 hover:text-white'
+                                }`}
+                            >
+                                #{pos}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {hiddenPositions.size > 0 && (
+                    <button
+                        onClick={resetReveal}
+                        className="px-3 py-2 rounded-lg bg-zinc-900/60 border border-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-all"
+                    >
+                        Reset reveal
+                    </button>
+                )}
+
+                {hiddenPositions.size > 0 && (
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-2">
+                        Press <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-orange-400">space</kbd> to reveal from bottom
+                    </div>
+                )}
+            </div>
+
+            {/* All teams */}
+            <div className={`w-full max-w-5xl mb-16 ${columns === 2 ? 'grid grid-cols-1 md:grid-cols-2 gap-3' : 'space-y-3'}`}>
                 {results.map((player) => {
                     const isTop3 = player.position <= 3;
                     const style = isTop3 ? medalStyles[player.position as 1 | 2 | 3] : null;
+                    const isHidden = hiddenPositions.has(player.position) && !revealedPositions.has(player.position);
+                    const justRevealed = hiddenPositions.has(player.position) && revealedPositions.has(player.position);
 
                     return (
                         <div
                             key={player.position}
                             className={`flex items-center gap-4 md:gap-6 px-6 md:px-8 py-4 md:py-5 rounded-2xl border transition-all ${
-                                isTop3
-                                    ? `${style!.bg} ${style!.border} ${style!.glow}`
-                                    : 'bg-zinc-900/40 border-zinc-800/50'
+                                isHidden
+                                    ? 'bg-zinc-900/60 border-dashed border-zinc-700/60'
+                                    : isTop3
+                                        ? `${style!.bg} ${style!.border} ${style!.glow} ${justRevealed ? 'animate-fade-in' : ''}`
+                                        : 'bg-zinc-900/40 border-zinc-800/50'
                             }`}
                         >
                             {/* Rank */}
                             <div className={`text-3xl md:text-5xl font-black w-16 md:w-20 text-center shrink-0 ${
-                                isTop3 ? style!.rank : 'text-zinc-600'
+                                isHidden ? 'text-zinc-600' : isTop3 ? style!.rank : 'text-zinc-600'
                             }`}>
-                                {isTop3 ? (
+                                {isTop3 && !isHidden ? (
                                     <TrophyIcon className={`w-8 h-8 md:w-12 md:h-12 mx-auto ${style!.text}`} />
                                 ) : (
                                     `#${player.position}`
@@ -142,19 +237,22 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
 
                             {/* Color bar + Name */}
                             <div className="flex items-center flex-grow min-w-0">
-                                <div className="w-2 h-10 md:h-14 rounded-sm mr-4 shrink-0" style={{ backgroundColor: player.color || '#555' }} />
+                                <div
+                                    className="w-2 h-10 md:h-14 rounded-sm mr-4 shrink-0"
+                                    style={{ backgroundColor: isHidden ? '#3f3f46' : (player.color || '#555') }}
+                                />
                                 <span className={`font-black text-xl md:text-3xl truncate uppercase tracking-wider ${
-                                    isTop3 ? 'text-white' : 'text-zinc-300'
+                                    isHidden ? 'text-zinc-600' : isTop3 ? 'text-white' : 'text-zinc-300'
                                 }`}>
-                                    {player.name}
+                                    {isHidden ? '??????' : player.name}
                                 </span>
                             </div>
 
                             {/* Score */}
                             <div className={`font-mono font-black text-2xl md:text-4xl shrink-0 ${
-                                isTop3 ? style!.text : 'text-zinc-400'
+                                isHidden ? 'text-zinc-600' : isTop3 ? style!.text : 'text-zinc-400'
                             }`}>
-                                {player.score.toLocaleString()}
+                                {isHidden ? '???' : player.score.toLocaleString()}
                             </div>
                         </div>
                     );

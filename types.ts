@@ -63,4 +63,5 @@ export interface GamePhoto {
   teamName?: string;
   taskTitle?: string;
   timestamp?: string | number;
+  mediaType?: 'image' | 'video';
 }

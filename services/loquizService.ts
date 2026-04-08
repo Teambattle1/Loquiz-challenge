@@ -258,17 +258,27 @@ export const fetchGamePhotos = async (gameId: string, apiKey: string): Promise<G
     } catch (e) {}
 
     const seenUrls = new Set<string>();
+    const isVideoUrl = (u: string) => /\.(mp4|webm|mov|m4v|ogv|avi)(\?|#|$)/i.test(u);
+    const isVideoMeta = (p: any): boolean => {
+        const typeField = String(p.type || p.kind || p.mediaType || p.media_type || '').toLowerCase();
+        if (typeField === 'video' || typeField.startsWith('video/')) return true;
+        const mime = String(p.mimeType || p.mime_type || p.contentType || '').toLowerCase();
+        if (mime.startsWith('video/')) return true;
+        return false;
+    };
     return photos
         .map((p: any) => {
             const url = p.original || p.optimized || p.optimized1200 || p.url || p.mediaUrl || p.file || p.imageUrl || p.large;
-            const thumb = p.thumbnail || p.thumbnailUrl || p.thumb || p.small || url;
+            const thumb = p.thumbnail || p.thumbnailUrl || p.thumb || p.small || (isVideoUrl(url) || isVideoMeta(p) ? undefined : url);
+            const mediaType: 'image' | 'video' = (isVideoMeta(p) || isVideoUrl(url || '')) ? 'video' : 'image';
             return {
                 id: p.id || String(Math.random()),
                 url: url,
                 thumbnailUrl: thumb,
                 teamName: p.team?.name || p.teamName || teamNameMap.get(p.teamId) || 'Unknown Team',
-                taskTitle: taskTitleMap.get(p.taskId) || p.taskTitle || (p.task ? getTaskTitle(p.task) : null) || 'Photo',
-                timestamp: p.time || p.timestamp || p.created || p.createdAt
+                taskTitle: taskTitleMap.get(p.taskId) || p.taskTitle || (p.task ? getTaskTitle(p.task) : null) || (mediaType === 'video' ? 'Video' : 'Photo'),
+                timestamp: p.time || p.timestamp || p.created || p.createdAt,
+                mediaType,
             };
         })
         .filter(p => {

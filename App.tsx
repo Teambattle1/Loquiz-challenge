@@ -31,6 +31,25 @@ const getClientIdFromUrl = (): string | null => {
   return params.get('client');
 };
 
+// Check for ?game=GAMEID (optionally &view=results|showtime|...) — internal session deep-link
+const getSessionFromUrl = (): { gameId: string; view?: ViewState } | null => {
+  const params = new URLSearchParams(window.location.search);
+  const gameId = params.get('game');
+  if (!gameId) return null;
+  const viewParam = params.get('view') as ViewState | null;
+  const allowed: ViewState[] = ['dashboard', 'results', 'showtime', 'taskmaster', 'timeline', 'results-reveal', 'admin', 'client-tasks'];
+  const view = viewParam && allowed.includes(viewParam) ? viewParam : undefined;
+  return { gameId, view };
+};
+
+export const buildSessionUrl = (gameId: string, view?: Exclude<ViewState, 'login' | 'lobby'>): string => {
+  const base = `${window.location.origin}${window.location.pathname}`;
+  const params = new URLSearchParams();
+  params.set('game', gameId);
+  if (view && view !== 'dashboard') params.set('view', view);
+  return `${base}?${params.toString()}`;
+};
+
 const App: React.FC = () => {
   const [galleryId] = useState<string | null>(getGalleryIdFromUrl);
   const [clientId] = useState<string | null>(getClientIdFromUrl);
@@ -49,7 +68,8 @@ const App: React.FC = () => {
 };
 
 const MainApp: React.FC = () => {
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const initialSession = getSessionFromUrl();
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(initialSession?.gameId || null);
   const [gameName, setGameName] = useState<string | null>(null);
 
   // Initialize key with hardcoded value or from localStorage
@@ -62,7 +82,9 @@ const MainApp: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<ViewState>(() => {
     const initialKey = HARDCODED_API_KEY || localStorage.getItem('loquiz_api_key');
-    return !initialKey ? 'login' : 'lobby';
+    if (!initialKey) return 'login';
+    if (initialSession?.gameId) return initialSession.view || 'dashboard';
+    return 'lobby';
   });
 
   // Data state for sub-views
@@ -117,6 +139,30 @@ const MainApp: React.FC = () => {
       loadGameData(selectedGameId, apiKey);
     }
   }, [selectedGameId, apiKey, loadGameData]);
+
+  // Keep URL in sync with current session/view so the address bar is always shareable
+  useEffect(() => {
+    if (currentView === 'login' || currentView === 'lobby' || !selectedGameId) {
+      // Strip any ?game=... from the URL
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('game') || params.has('view')) {
+        params.delete('game');
+        params.delete('view');
+        const qs = params.toString();
+        const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
+      }
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.set('game', selectedGameId);
+    if (currentView && currentView !== 'dashboard') params.set('view', currentView);
+    else params.delete('view');
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    if (newUrl !== `${window.location.pathname}${window.location.search}`) {
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [selectedGameId, currentView]);
 
   const viewResults = (gameId: string) => {
     setSelectedGameId(gameId);

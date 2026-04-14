@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GameTask, GamePhoto } from '../types';
+import { GameTask, GamePhoto, PlayerResult } from '../types';
 import { saveSharedTasks, fetchSharedTasks, getClientShareUrl, SharedTaskData } from '../services/taskShareService';
-import { saveGallery, fetchGallery, getGalleryShareUrl } from '../services/galleryService';
+import { saveGallery, fetchGallery, getGalleryShareUrl, getClientSectionUrl, getClientShareUrlWithSections, ShareSections, DEFAULT_SECTIONS } from '../services/galleryService';
 
 type TabType = 'tasks' | 'photos' | 'share';
+type SectionKey = 'gallery' | 'ranking' | 'tasks' | 'answers';
 
 interface ClientHubProps {
     tasks: GameTask[];
     photos: GamePhoto[];
+    results: PlayerResult[];
     gameId: string;
     gameName: string | null;
 }
@@ -39,7 +41,7 @@ const getShortIntro = (task: GameTask): string => {
     return extractText(raw.shortIntro) || extractText(raw.short_intro) || extractText(raw.comments?.shortIntro) || task.shortIntro || '';
 };
 
-const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, gameId, gameName }) => {
+const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, gameName }) => {
     const [tab, setTab] = useState<TabType>('tasks');
 
     // Task state
@@ -49,6 +51,10 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, gameId, gameName }
     // Photo state
     const [hiddenPhotoIds, setHiddenPhotoIds] = useState<Set<string>>(new Set());
     const [photoSaving, setPhotoSaving] = useState(false);
+
+    // Section visibility
+    const [sections, setSections] = useState<ShareSections>(DEFAULT_SECTIONS);
+    const toggleSection = (key: SectionKey) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     // Share state
     const [copied, setCopied] = useState<string | null>(null);
@@ -66,6 +72,9 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, gameId, gameName }
             }
             if (galleryData && galleryData.hidden_ids.length > 0) {
                 setHiddenPhotoIds(new Set(galleryData.hidden_ids));
+            }
+            if (galleryData?.sections) {
+                setSections({ ...DEFAULT_SECTIONS, ...galleryData.sections });
             }
             setLoaded(true);
         });
@@ -108,19 +117,25 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, gameId, gameName }
 
     const visiblePhotos = useMemo(() => photos.filter(p => !hiddenPhotoIds.has(p.id)), [photos, hiddenPhotoIds]);
 
-    const savePhotos = async () => {
+    const savePhotos = async (sectionsOverride?: ShareSections) => {
         setPhotoSaving(true);
-        await saveGallery(gameId, gameName, photos, Array.from(hiddenPhotoIds));
+        await saveGallery(gameId, gameName, photos, Array.from(hiddenPhotoIds), {
+            sections: sectionsOverride || sections,
+            results,
+        });
         setPhotoSaving(false);
     };
 
     // --- Share actions ---
-    const copyLink = async (type: 'client' | 'gallery') => {
-        // Auto-save both before sharing
+    const copyLink = async (label: string, url: string) => {
+        // Auto-save tasks + gallery (with sections + results) before sharing
         await Promise.all([saveTasks(), savePhotos()]);
-        const url = type === 'client' ? getClientShareUrl(gameId) : getGalleryShareUrl(gameId);
-        await navigator.clipboard.writeText(url);
-        setCopied(type);
+        try {
+            await navigator.clipboard.writeText(url);
+        } catch {
+            window.prompt('Kopiér link:', url);
+        }
+        setCopied(label);
         setTimeout(() => setCopied(null), 2500);
     };
 
@@ -276,54 +291,140 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, gameId, gameName }
 
                 {/* === SHARE TAB === */}
                 {tab === 'share' && (
-                    <div className="p-6 flex flex-col items-center justify-center gap-6 min-h-[50vh]">
-                        <p className="text-zinc-400 text-sm text-center max-w-md">
-                            Del links til kundens public side. Tasks og billeder gemmes automatisk inden link kopieres.
-                        </p>
-
-                        {/* Client link (tasks + photos) */}
-                        <button onClick={() => copyLink('client')}
-                            className="w-full max-w-md p-5 rounded-2xl bg-orange-600/10 border border-orange-500/40 hover:bg-orange-600/20 hover:border-orange-500/60 transition-all text-left group">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-white font-black uppercase tracking-wider text-sm">Client Side</h3>
-                                    <p className="text-zinc-400 text-xs mt-1">Tasks + billeder - kundens oversigt</p>
-                                    <p className="text-zinc-600 text-[10px] font-mono mt-2 break-all">{getClientShareUrl(gameId)}</p>
-                                </div>
-                                <div className={`shrink-0 ml-4 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                                    copied === 'client'
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-orange-600 text-white group-hover:bg-orange-500'
-                                }`}>
-                                    {copied === 'client' ? 'Kopieret!' : 'Kopier'}
-                                </div>
+                    <div className="p-6 max-w-2xl mx-auto space-y-8">
+                        {/* Section selector */}
+                        <div>
+                            <h3 className="text-white font-black uppercase tracking-wider text-sm mb-1">Hvad skal klienten kunne se?</h3>
+                            <p className="text-zinc-500 text-xs mb-4">Afkryds 1-3. Valget indlejres i linket.</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                {([
+                                    { key: 'tasks' as const, label: 'Tasks', desc: `${visibleTaskIds.size} synlige` },
+                                    { key: 'gallery' as const, label: 'Billeder', desc: `${visiblePhotos.length} billeder` },
+                                    { key: 'ranking' as const, label: 'Ranking', desc: `${results.length} hold` },
+                                ]).map(s => {
+                                    const active = sections[s.key];
+                                    return (
+                                        <button key={s.key} onClick={() => toggleSection(s.key)}
+                                            className={`text-left p-4 rounded-xl border transition-all ${
+                                                active
+                                                    ? 'bg-orange-600/10 border-orange-500/50 shadow-[0_0_15px_rgba(234,88,12,0.15)]'
+                                                    : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-600'
+                                            }`}>
+                                            <div className="flex items-start gap-3">
+                                                <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 transition-all ${
+                                                    active ? 'bg-orange-500 text-white' : 'bg-zinc-800 border border-zinc-600 text-zinc-500'
+                                                }`}>
+                                                    {active && (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                                            <polyline points="20 6 9 17 4 12" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className={`font-bold text-sm uppercase tracking-wide ${active ? 'text-orange-400' : 'text-white'}`}>{s.label}</p>
+                                                    <p className="text-zinc-500 text-[11px]">{s.desc}</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
-                        </button>
-
-                        {/* Gallery link (photos only) */}
-                        <button onClick={() => copyLink('gallery')}
-                            className="w-full max-w-md p-5 rounded-2xl bg-zinc-900/80 border border-zinc-700 hover:border-zinc-500 transition-all text-left group">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-white font-black uppercase tracking-wider text-sm">Kun billeder</h3>
-                                    <p className="text-zinc-400 text-xs mt-1">Galleri med download - kun billeder</p>
-                                    <p className="text-zinc-600 text-[10px] font-mono mt-2 break-all">{getGalleryShareUrl(gameId)}</p>
-                                </div>
-                                <div className={`shrink-0 ml-4 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                                    copied === 'gallery'
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-zinc-700 text-white group-hover:bg-zinc-600'
-                                }`}>
-                                    {copied === 'gallery' ? 'Kopieret!' : 'Kopier'}
-                                </div>
-                            </div>
-                        </button>
-
-                        <div className="text-center mt-4">
-                            <p className="text-zinc-600 text-xs uppercase tracking-widest">
-                                {visibleTaskIds.size} tasks synlige &bull; {visiblePhotos.length} billeder synlige
-                            </p>
                         </div>
+
+                        {/* Master client link */}
+                        <div>
+                            <h3 className="text-white font-black uppercase tracking-wider text-sm mb-3">Client link</h3>
+                            <button onClick={() => copyLink('client', getClientShareUrlWithSections(gameId, sections))}
+                                disabled={!sections.tasks && !sections.gallery && !sections.ranking && !sections.answers}
+                                className="w-full p-5 rounded-2xl bg-orange-600/10 border border-orange-500/40 hover:bg-orange-600/20 hover:border-orange-500/60 transition-all text-left group disabled:opacity-40 disabled:cursor-not-allowed">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <p className="text-white font-black uppercase tracking-wider text-sm">Fælles client side</p>
+                                        <p className="text-zinc-400 text-xs mt-1">
+                                            {[sections.tasks && 'Tasks', sections.gallery && 'Billeder', sections.ranking && 'Ranking'].filter(Boolean).join(' • ') || 'Vælg mindst én sektion ovenfor'}
+                                        </p>
+                                        <p className="text-zinc-600 text-[10px] font-mono mt-2 break-all">{getClientShareUrlWithSections(gameId, sections)}</p>
+                                    </div>
+                                    <div className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                                        copied === 'client' ? 'bg-green-600 text-white' : 'bg-orange-600 text-white group-hover:bg-orange-500'
+                                    }`}>
+                                        {copied === 'client' ? 'Kopieret!' : 'Kopier'}
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+
+                        {/* Direct section links */}
+                        <div>
+                            <h3 className="text-white font-black uppercase tracking-wider text-sm mb-3">Direkte sektion-links</h3>
+                            <div className="grid grid-cols-3 gap-2">
+                                {([
+                                    { key: 'tasks' as const, label: 'Tasks' },
+                                    { key: 'gallery' as const, label: 'Billeder' },
+                                    { key: 'ranking' as const, label: 'Ranking' },
+                                ]).map(s => {
+                                    const url = getClientSectionUrl(gameId, s.key, undefined, sections);
+                                    const enabled = sections[s.key];
+                                    return (
+                                        <button key={s.key}
+                                            onClick={() => copyLink(`section-${s.key}`, url)}
+                                            disabled={!enabled}
+                                            title={enabled ? url : 'Aktiver sektionen ovenfor for at dele dette link'}
+                                            className={`text-left p-3 rounded-lg border transition-all ${
+                                                !enabled
+                                                    ? 'bg-zinc-900/30 border-zinc-800 opacity-40 cursor-not-allowed'
+                                                    : 'bg-zinc-900/80 border-zinc-700 hover:border-orange-500/60 hover:bg-zinc-900'
+                                            }`}>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-white font-bold text-xs uppercase tracking-wider">{s.label}</span>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                    copied === `section-${s.key}` ? 'bg-green-600 text-white' : 'bg-zinc-800 text-orange-400'
+                                                }`}>
+                                                    {copied === `section-${s.key}` ? '✓' : 'Kopier'}
+                                                </span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Per-team share */}
+                        {results.length > 0 && (
+                            <div>
+                                <h3 className="text-white font-black uppercase tracking-wider text-sm mb-1">Team-specifikke links</h3>
+                                <p className="text-zinc-500 text-xs mb-3">
+                                    Linker direkte til ranking med holdets placering highlightet og åbner team-detalje under Answers.
+                                </p>
+                                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-700">
+                                    {results.map(team => {
+                                        const teamId = (team as any).id || team.name;
+                                        const url = getClientSectionUrl(gameId, 'ranking', teamId, sections);
+                                        const isCopied = copied === `team-${teamId}`;
+                                        return (
+                                            <button
+                                                key={teamId}
+                                                onClick={() => copyLink(`team-${teamId}`, url)}
+                                                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-orange-500/40 hover:bg-zinc-900 transition-all text-left"
+                                            >
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0" style={{ backgroundColor: team.color || '#52525b', color: '#fff' }}>
+                                                    #{team.position}
+                                                </div>
+                                                <div className="flex-grow min-w-0">
+                                                    <p className="text-white font-bold text-sm uppercase truncate">{team.name}</p>
+                                                    <p className="text-zinc-500 text-[10px] font-mono">{team.score.toLocaleString()} pts</p>
+                                                </div>
+                                                <span className={`shrink-0 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                    isCopied ? 'bg-green-600 text-white' : 'bg-orange-600/20 text-orange-400 border border-orange-500/30'
+                                                }`}>
+                                                    {isCopied ? 'Kopieret!' : '🔗 Kopier'}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

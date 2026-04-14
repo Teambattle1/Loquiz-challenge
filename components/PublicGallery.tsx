@@ -1,15 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import JSZip from 'jszip';
-import { fetchGallery, SharedGallery } from '../services/galleryService';
+import { useQueryState, parseAsStringLiteral, parseAsString } from 'nuqs';
+import { fetchGallery, SharedGallery, DEFAULT_SECTIONS, ShareSections, decodeShowParam } from '../services/galleryService';
 import { fetchSharedTasks, SharedTasks, SharedTaskData } from '../services/taskShareService';
-import { GamePhoto } from '../types';
+import { GamePhoto, PlayerResult } from '../types';
 
-type TabType = 'photos' | 'tasks';
+type TabType = 'photos' | 'tasks' | 'ranking' | 'answers';
 
 interface PublicGalleryProps {
     gameId: string;
     initialTab?: TabType;
 }
+
+const slugifyTeam = (t: PlayerResult): string => (t.id || t.name || `team-${t.position}`);
+
+const teamInitials = (name: string): string => {
+    const parts = name.trim().split(/\s+/).slice(0, 2);
+    return parts.map(p => p[0] || '').join('').toUpperCase() || '?';
+};
+
+const SECTION_VALUES = ['photos', 'tasks', 'ranking', 'answers'] as const;
 
 const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => {
     const [gallery, setGallery] = useState<SharedGallery | null>(null);
@@ -17,7 +27,13 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [zipProgress, setZipProgress] = useState<{ current: number; total: number; status: string } | null>(null);
-    const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'photos');
+
+    // URL-synced state (refresh-safe) — nuqs writes changes back to ?section=... & ?team=...
+    const [activeTab, setActiveTab] = useQueryState<TabType>(
+        'section',
+        parseAsStringLiteral(SECTION_VALUES).withDefault(initialTab || 'photos')
+    );
+    const [activeTeamSlug, setActiveTeamSlug] = useQueryState('team', parseAsString);
 
     useEffect(() => {
         Promise.all([
@@ -26,10 +42,25 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
         ]).then(([galleryData, tasksData]) => {
             setGallery(galleryData);
             setSharedTasks(tasksData);
-            // If no gallery but has tasks, switch to tasks tab
-            if (!galleryData && tasksData) setActiveTab('tasks');
+            const sections: ShareSections = { ...DEFAULT_SECTIONS, ...(galleryData?.sections || {}) };
+            // If the URL didn't ask for a specific section, fall back to the first enabled one
+            const urlHasSection = new URLSearchParams(window.location.search).has('section');
+            if (!urlHasSection) {
+                if (galleryData?.results?.length && activeTeamSlug && sections.ranking) {
+                    setActiveTab('ranking');
+                } else if (sections.gallery && galleryData) {
+                    setActiveTab('photos');
+                } else if (sections.ranking && galleryData?.results?.length) {
+                    setActiveTab('ranking');
+                } else if (sections.tasks && tasksData) {
+                    setActiveTab('tasks');
+                } else if (sections.answers && galleryData?.results?.length) {
+                    setActiveTab('answers');
+                }
+            }
             setLoading(false);
         });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [gameId]);
 
     const visiblePhotos: GamePhoto[] = gallery
@@ -125,10 +156,23 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
         ? sharedTasks.tasks.filter(t => sharedTasks.visible_task_ids.includes(t.id))
         : [];
 
-    const hasPhotos = gallery && visiblePhotos.length > 0;
-    const hasTasks = visibleTasks.length > 0;
+    // URL ?show=tasks,photos,ranking overrides DB sections so the link is self-sufficient
+    const urlShow = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('show') : null;
+    const urlSections = decodeShowParam(urlShow);
+    const sections: ShareSections = urlSections || { ...DEFAULT_SECTIONS, ...(gallery?.sections || {}) };
+    const sharedResults: PlayerResult[] = (gallery?.results as PlayerResult[]) || [];
 
-    if (!hasPhotos && !hasTasks) {
+    const hasPhotos = !!gallery && visiblePhotos.length > 0 && sections.gallery;
+    const hasTasks = visibleTasks.length > 0 && sections.tasks;
+    const hasRanking = sharedResults.length > 0 && sections.ranking;
+    const hasAnswers = sharedResults.length > 0 && sections.answers;
+
+    // Build task title lookup for the answers view
+    const taskTitleById = new Map<string, string>();
+    visibleTasks.forEach(t => taskTitleById.set(t.id, t.title));
+    if (sharedTasks) sharedTasks.tasks.forEach(t => { if (!taskTitleById.has(t.id)) taskTitleById.set(t.id, t.title); });
+
+    if (!hasPhotos && !hasTasks && !hasRanking && !hasAnswers) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
                 <div className="text-center">
@@ -138,6 +182,21 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
             </div>
         );
     }
+
+    const activeTeam = activeTeamSlug
+        ? sharedResults.find(t => slugifyTeam(t) === activeTeamSlug)
+        : null;
+    const teamPhotos = activeTeam
+        ? visiblePhotos.filter(p => (p.teamName || '').trim() === activeTeam.name.trim())
+        : [];
+
+    const tabConfig: { id: TabType; label: string; show: boolean; count?: number }[] = [
+        { id: 'photos', label: 'Photos', show: hasPhotos, count: visiblePhotos.length },
+        { id: 'ranking', label: 'Ranking', show: hasRanking, count: sharedResults.length },
+        { id: 'tasks', label: 'Tasks', show: hasTasks, count: visibleTasks.length },
+        { id: 'answers', label: 'Answers', show: hasAnswers, count: sharedResults.length },
+    ];
+    const visibleTabs = tabConfig.filter(t => t.show);
 
     const pct = zipProgress ? Math.round((zipProgress.current / zipProgress.total) * 100) : 0;
 
@@ -153,39 +212,27 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                             {gameName}
                         </h1>
                         {/* Tabs */}
-                        {(hasPhotos && hasTasks) && (
-                            <div className="flex gap-3 mt-2">
-                                <button
-                                    onClick={() => setActiveTab('photos')}
-                                    className={`text-xs font-bold uppercase tracking-[0.2em] pb-1 border-b-2 transition-all ${
-                                        activeTab === 'photos'
-                                            ? 'text-orange-500 border-orange-500'
-                                            : 'text-zinc-500 border-transparent hover:text-zinc-300'
-                                    }`}
-                                >
-                                    Photos ({visiblePhotos.length})
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('tasks')}
-                                    className={`text-xs font-bold uppercase tracking-[0.2em] pb-1 border-b-2 transition-all ${
-                                        activeTab === 'tasks'
-                                            ? 'text-orange-500 border-orange-500'
-                                            : 'text-zinc-500 border-transparent hover:text-zinc-300'
-                                    }`}
-                                >
-                                    Tasks ({visibleTasks.length})
-                                </button>
+                        {visibleTabs.length > 1 && (
+                            <div className="flex flex-wrap gap-4 mt-2">
+                                {visibleTabs.map(t => (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => { setActiveTab(t.id); if (t.id !== 'answers' && t.id !== 'ranking') setActiveTeamSlug(null); }}
+                                        className={`text-xs font-bold uppercase tracking-[0.2em] pb-1 border-b-2 transition-all ${
+                                            activeTab === t.id
+                                                ? 'text-orange-500 border-orange-500'
+                                                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                                        }`}
+                                    >
+                                        {t.label}{typeof t.count === 'number' ? ` (${t.count})` : ''}
+                                    </button>
+                                ))}
                             </div>
                         )}
-                        {activeTab === 'photos' && (
+                        {activeTab === 'photos' && hasPhotos && (
                             <p className="text-orange-500 text-xs font-bold uppercase tracking-[0.2em] mt-1">
                                 {visiblePhotos.length} photos
                                 {selectedIds.size > 0 && <span className="text-white ml-2">• {selectedIds.size} selected</span>}
-                            </p>
-                        )}
-                        {activeTab === 'tasks' && !hasPhotos && (
-                            <p className="text-orange-500 text-xs font-bold uppercase tracking-[0.2em] mt-1">
-                                {visibleTasks.length} tasks
                             </p>
                         )}
                     </div>
@@ -322,6 +369,169 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {/* Ranking */}
+            {activeTab === 'ranking' && hasRanking && (
+                <div className="p-4 md:p-8 max-w-3xl mx-auto">
+                    <div className="space-y-2">
+                        {sharedResults.map(team => {
+                            const slug = slugifyTeam(team);
+                            const isHighlighted = activeTeamSlug === slug;
+                            const isTop3 = team.position <= 3;
+                            return (
+                                <div
+                                    key={slug}
+                                    className={`flex items-center gap-4 px-4 md:px-6 py-3 md:py-4 rounded-2xl border transition-all ${
+                                        isHighlighted
+                                            ? 'bg-orange-500/15 border-orange-500 shadow-[0_0_30px_rgba(234,88,12,0.4)] scale-[1.02]'
+                                            : isTop3
+                                                ? 'bg-yellow-500/5 border-yellow-500/30'
+                                                : 'bg-zinc-900/60 border-zinc-800'
+                                    }`}
+                                >
+                                    <div className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-base md:text-lg font-black shrink-0 ${
+                                        isHighlighted ? 'bg-orange-500 text-white' : isTop3 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-zinc-800 text-zinc-400'
+                                    }`}>
+                                        #{team.position}
+                                    </div>
+                                    <div className="w-1.5 h-10 rounded-sm shrink-0" style={{ backgroundColor: team.color || '#52525b' }} />
+                                    <div className="flex-grow min-w-0">
+                                        <p className={`font-black text-base md:text-xl uppercase truncate ${isHighlighted ? 'text-white' : 'text-zinc-200'}`}>{team.name}</p>
+                                        {isHighlighted && <p className="text-orange-300 text-[10px] font-bold uppercase tracking-widest">Dit hold</p>}
+                                    </div>
+                                    <div className={`font-mono font-black text-lg md:text-2xl shrink-0 ${isHighlighted ? 'text-orange-300' : 'text-zinc-300'}`}>
+                                        {team.score.toLocaleString()}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Answers — teams as round icons, click to drill into team detail */}
+            {activeTab === 'answers' && hasAnswers && !activeTeam && (
+                <div className="p-4 md:p-8 max-w-5xl mx-auto">
+                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-6 text-center">Klik på et hold for at se billeder og svar</p>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-6">
+                        {sharedResults.map(team => {
+                            const slug = slugifyTeam(team);
+                            const photoCount = visiblePhotos.filter(p => (p.teamName || '').trim() === team.name.trim()).length;
+                            const answerCount = team.answers?.length || 0;
+                            return (
+                                <button
+                                    key={slug}
+                                    onClick={() => setActiveTeamSlug(slug)}
+                                    className="group flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-zinc-900/60 transition-all"
+                                >
+                                    <div
+                                        className="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-2xl md:text-3xl font-black text-white shadow-[0_8px_30px_rgba(0,0,0,0.5)] group-hover:scale-110 transition-transform border-4"
+                                        style={{ backgroundColor: team.color || '#52525b', borderColor: team.color || '#52525b' }}
+                                    >
+                                        {teamInitials(team.name)}
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-white text-xs md:text-sm font-bold uppercase truncate max-w-[120px]">{team.name}</p>
+                                        <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">#{team.position} • {photoCount}📷 {answerCount}✎</p>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Answers — single team detail */}
+            {activeTab === 'answers' && hasAnswers && activeTeam && (
+                <div className="p-4 md:p-8 max-w-4xl mx-auto">
+                    <button
+                        onClick={() => setActiveTeamSlug(null)}
+                        className="text-zinc-400 hover:text-orange-400 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-1"
+                    >
+                        ← Tilbage til hold-oversigt
+                    </button>
+                    <div className="flex items-center gap-4 mb-6">
+                        <div
+                            className="w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center text-xl md:text-2xl font-black text-white shadow-2xl border-4"
+                            style={{ backgroundColor: activeTeam.color || '#52525b', borderColor: activeTeam.color || '#52525b' }}
+                        >
+                            {teamInitials(activeTeam.name)}
+                        </div>
+                        <div>
+                            <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter">{activeTeam.name}</h2>
+                            <p className="text-orange-500 text-xs font-bold uppercase tracking-widest">
+                                Position #{activeTeam.position} • {activeTeam.score.toLocaleString()} pts
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Team photos */}
+                    {teamPhotos.length > 0 && (
+                        <div className="mb-8">
+                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">Billeder ({teamPhotos.length})</h3>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                                {teamPhotos.map(photo => (
+                                    <a
+                                        key={photo.id}
+                                        href={photo.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="aspect-square rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-orange-500/50 transition-all group"
+                                    >
+                                        {photo.mediaType === 'video' ? (
+                                            photo.thumbnailUrl ? (
+                                                <img src={photo.thumbnailUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                            ) : (
+                                                <video src={photo.url} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                                            )
+                                        ) : (
+                                            <img src={photo.thumbnailUrl || photo.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                        )}
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Team answers */}
+                    {(activeTeam.answers && activeTeam.answers.length > 0) && (
+                        <div>
+                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">Svar ({activeTeam.answers.length})</h3>
+                            <div className="space-y-2">
+                                {activeTeam.answers.map((ans, idx) => {
+                                    const title = taskTitleById.get(ans.taskId) || `Task ${ans.taskId}`;
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border ${
+                                                ans.isCorrect
+                                                    ? 'bg-green-500/5 border-green-500/30'
+                                                    : 'bg-zinc-900/60 border-zinc-800'
+                                            }`}
+                                        >
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-black ${
+                                                ans.isCorrect ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800 text-zinc-500'
+                                            }`}>
+                                                {ans.isCorrect ? '✓' : '–'}
+                                            </div>
+                                            <div className="flex-grow min-w-0">
+                                                <p className="text-white text-sm font-bold uppercase truncate">{title}</p>
+                                            </div>
+                                            <div className="font-mono font-black text-sm text-orange-400 shrink-0">
+                                                {(ans.score || 0).toLocaleString()}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {teamPhotos.length === 0 && (!activeTeam.answers || activeTeam.answers.length === 0) && (
+                        <p className="text-zinc-500 text-center py-12 text-sm uppercase tracking-widest">Ingen data for dette hold</p>
+                    )}
                 </div>
             )}
 

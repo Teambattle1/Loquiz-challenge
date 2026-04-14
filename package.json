@@ -12,6 +12,7 @@
     "@google/genai": "^1.28.0",
     "@supabase/supabase-js": "^2.101.0",
     "jszip": "^3.10.1",
+    "nuqs": "^2.8.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

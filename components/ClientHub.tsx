@@ -4,7 +4,7 @@ import { saveSharedTasks, fetchSharedTasks, SharedTaskData } from '../services/t
 import { saveGallery, fetchGallery, getClientSectionUrl, getClientShareUrlWithSections, ShareSections, DEFAULT_SECTIONS } from '../services/galleryService';
 
 type TabType = 'tasks' | 'photos' | 'share';
-type SectionKey = 'gallery' | 'ranking' | 'tasks' | 'answers';
+type SectionKey = 'gallery' | 'ranking' | 'tasks' | 'answers' | 'teams';
 
 interface ClientHubProps {
     tasks: GameTask[];
@@ -52,6 +52,14 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
     const [hiddenPhotoIds, setHiddenPhotoIds] = useState<Set<string>>(new Set());
     const [photoSaving, setPhotoSaving] = useState(false);
 
+    // Hidden teams (per-team opt-out for the public team-links list)
+    const [hiddenTeamIds, setHiddenTeamIds] = useState<Set<string>>(new Set());
+    const toggleTeam = (id: string) => setHiddenTeamIds(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
     // Section visibility
     const [sections, setSections] = useState<ShareSections>(DEFAULT_SECTIONS);
     const toggleSection = (key: SectionKey) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -76,6 +84,8 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
             if (galleryData?.sections) {
                 setSections({ ...DEFAULT_SECTIONS, ...galleryData.sections });
             }
+            const ht = (galleryData as any)?.hidden_team_ids as string[] | undefined;
+            if (ht && ht.length > 0) setHiddenTeamIds(new Set(ht));
             setLoaded(true);
         });
     }, [gameId]);
@@ -122,6 +132,7 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
         await saveGallery(gameId, gameName, photos, Array.from(hiddenPhotoIds), {
             sections: sectionsOverride || sections,
             results,
+            hiddenTeamIds: Array.from(hiddenTeamIds),
         });
         setPhotoSaving(false);
     };
@@ -300,11 +311,12 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
                                 <p className="text-zinc-500 text-xs mt-1 mb-4">Afkryds 1-3. Valget indlejres i linket.</p>
 
                                 {/* Inline checkboxes */}
-                                <div className="grid grid-cols-3 gap-2 mb-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                                     {([
                                         { key: 'tasks' as const, label: 'Tasks', desc: `${visibleTaskIds.size} synlige` },
                                         { key: 'gallery' as const, label: 'Billeder', desc: `${visiblePhotos.length} billeder` },
                                         { key: 'ranking' as const, label: 'Ranking', desc: `${results.length} hold` },
+                                        { key: 'teams' as const, label: 'Team-links', desc: `${results.length} hold` },
                                     ]).map(s => {
                                         const active = sections[s.key];
                                         return (
@@ -334,7 +346,7 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
 
                                 {/* URL + copy */}
                                 <button onClick={() => copyLink('client', getClientShareUrlWithSections(gameId, sections))}
-                                    disabled={!sections.tasks && !sections.gallery && !sections.ranking && !sections.answers}
+                                    disabled={!sections.tasks && !sections.gallery && !sections.ranking && !sections.answers && !sections.teams}
                                     className="w-full flex items-center justify-between gap-4 p-3 rounded-lg bg-zinc-900/60 border border-zinc-700 hover:border-orange-500/60 transition-all group disabled:opacity-40 disabled:cursor-not-allowed">
                                     <p className="text-zinc-400 text-[11px] font-mono break-all text-left min-w-0 flex-grow">{getClientShareUrlWithSections(gameId, sections)}</p>
                                     <div className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
@@ -384,34 +396,71 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
                         {/* Per-team share */}
                         {results.length > 0 && (
                             <div>
-                                <h3 className="text-white font-black uppercase tracking-wider text-sm mb-1">Team-specifikke links</h3>
+                                <div className="flex items-baseline justify-between gap-3 mb-1">
+                                    <h3 className="text-white font-black uppercase tracking-wider text-sm">Team-specifikke links</h3>
+                                    {sections.teams && (
+                                        <span className="text-orange-400 text-[10px] font-bold uppercase tracking-wider">
+                                            {results.length - hiddenTeamIds.size}/{results.length} synlige for klient
+                                        </span>
+                                    )}
+                                </div>
                                 <p className="text-zinc-500 text-xs mb-3">
-                                    Linker direkte til ranking med holdets placering highlightet og åbner team-detalje under Answers.
+                                    {sections.teams
+                                        ? 'Klik kopier for at få et link. Brug øjet for at skjule et hold for klienten på det fælles client-link.'
+                                        : 'Linker direkte til ranking med holdets placering highlightet og åbner team-detalje under Answers.'}
                                 </p>
                                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-700">
                                     {results.map(team => {
                                         const teamId = (team as any).id || team.name;
                                         const url = getClientSectionUrl(gameId, 'ranking', teamId, sections);
                                         const isCopied = copied === `team-${teamId}`;
+                                        const isHidden = hiddenTeamIds.has(teamId);
                                         return (
-                                            <button
-                                                key={teamId}
-                                                onClick={() => copyLink(`team-${teamId}`, url)}
-                                                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-orange-500/40 hover:bg-zinc-900 transition-all text-left"
+                                            <div key={teamId}
+                                                className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all ${
+                                                    isHidden && sections.teams
+                                                        ? 'bg-zinc-900/30 border-zinc-800 opacity-50'
+                                                        : 'bg-zinc-900/60 border-zinc-800 hover:border-orange-500/40 hover:bg-zinc-900'
+                                                }`}
                                             >
                                                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0" style={{ backgroundColor: team.color || '#52525b', color: '#fff' }}>
                                                     #{team.position}
                                                 </div>
-                                                <div className="flex-grow min-w-0">
+                                                <button onClick={() => copyLink(`team-${teamId}`, url)} className="flex-grow min-w-0 text-left">
                                                     <p className="text-white font-bold text-sm uppercase truncate">{team.name}</p>
                                                     <p className="text-zinc-500 text-[10px] font-mono">{team.score.toLocaleString()} pts</p>
-                                                </div>
-                                                <span className={`shrink-0 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                                    isCopied ? 'bg-green-600 text-white' : 'bg-orange-600/20 text-orange-400 border border-orange-500/30'
-                                                }`}>
+                                                </button>
+                                                {sections.teams && (
+                                                    <button
+                                                        onClick={() => toggleTeam(teamId)}
+                                                        title={isHidden ? 'Vis for klient' : 'Skjul for klient'}
+                                                        className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-all ${
+                                                            isHidden
+                                                                ? 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
+                                                                : 'bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30'
+                                                        }`}
+                                                    >
+                                                        {isHidden ? (
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                                                <line x1="1" y1="1" x2="23" y2="23"/>
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                                                <circle cx="12" cy="12" r="3"/>
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => copyLink(`team-${teamId}`, url)}
+                                                    className={`shrink-0 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                                        isCopied ? 'bg-green-600 text-white' : 'bg-orange-600/20 text-orange-400 border border-orange-500/30 hover:bg-orange-600/30'
+                                                    }`}>
                                                     {isCopied ? 'Kopieret!' : '🔗 Kopier'}
-                                                </span>
-                                            </button>
+                                                </button>
+                                            </div>
                                         );
                                     })}
                                 </div>

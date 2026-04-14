@@ -6,6 +6,7 @@ export interface ShareSections {
     ranking: boolean;
     tasks: boolean;
     answers: boolean;
+    teams: boolean; // when true, public client page exposes per-team share links
 }
 
 export const DEFAULT_SECTIONS: ShareSections = {
@@ -13,6 +14,7 @@ export const DEFAULT_SECTIONS: ShareSections = {
     ranking: true,
     tasks: true,
     answers: false,
+    teams: false,
 };
 
 // Encode the selected sections into a short URL token (e.g. "tasks,photos,ranking")
@@ -22,6 +24,7 @@ export const encodeShowParam = (sections: ShareSections): string => {
     if (sections.gallery) parts.push('photos');
     if (sections.ranking) parts.push('ranking');
     if (sections.answers) parts.push('answers');
+    if (sections.teams) parts.push('teams');
     return parts.join(',');
 };
 
@@ -34,6 +37,7 @@ export const decodeShowParam = (show: string | null): ShareSections | null => {
         ranking: parts.has('ranking'),
         tasks: parts.has('tasks'),
         answers: parts.has('answers'),
+        teams: parts.has('teams'),
     };
 };
 
@@ -43,6 +47,7 @@ export interface SharedGallery {
     game_name: string | null;
     photos: GamePhoto[];
     hidden_ids: string[];
+    hidden_team_ids?: string[];
     sections?: ShareSections;
     results?: PlayerResult[];
     created_at: string;
@@ -54,7 +59,7 @@ export const saveGallery = async (
     gameName: string | null,
     photos: GamePhoto[],
     hiddenIds: string[],
-    extras?: { sections?: ShareSections; results?: PlayerResult[] }
+    extras?: { sections?: ShareSections; results?: PlayerResult[]; hiddenTeamIds?: string[] }
 ): Promise<void> => {
     const payload: any = {
         game_id: gameId,
@@ -65,6 +70,7 @@ export const saveGallery = async (
     };
     if (extras?.sections) payload.sections = extras.sections;
     if (extras?.results) payload.results = extras.results;
+    if (extras?.hiddenTeamIds) payload.hidden_team_ids = extras.hiddenTeamIds;
     const { error } = await supabase
         .from('shared_galleries')
         .upsert(payload, { onConflict: 'game_id' });

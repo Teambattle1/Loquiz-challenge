@@ -5,7 +5,7 @@ import { fetchGallery, SharedGallery, DEFAULT_SECTIONS, ShareSections, decodeSho
 import { fetchSharedTasks, SharedTasks, SharedTaskData } from '../services/taskShareService';
 import { GamePhoto, PlayerResult } from '../types';
 
-type TabType = 'photos' | 'tasks' | 'ranking' | 'answers';
+type TabType = 'photos' | 'tasks' | 'ranking' | 'answers' | 'teams';
 
 interface PublicGalleryProps {
     gameId: string;
@@ -19,7 +19,7 @@ const teamInitials = (name: string): string => {
     return parts.map(p => p[0] || '').join('').toUpperCase() || '?';
 };
 
-const SECTION_VALUES = ['photos', 'tasks', 'ranking', 'answers'] as const;
+const SECTION_VALUES = ['photos', 'tasks', 'ranking', 'answers', 'teams'] as const;
 
 const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => {
     const [gallery, setGallery] = useState<SharedGallery | null>(null);
@@ -166,13 +166,14 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     const hasTasks = visibleTasks.length > 0 && sections.tasks;
     const hasRanking = sharedResults.length > 0 && sections.ranking;
     const hasAnswers = sharedResults.length > 0 && sections.answers;
+    const hasTeams = sharedResults.length > 0 && sections.teams;
 
     // Build task title lookup for the answers view
     const taskTitleById = new Map<string, string>();
     visibleTasks.forEach(t => taskTitleById.set(t.id, t.title));
     if (sharedTasks) sharedTasks.tasks.forEach(t => { if (!taskTitleById.has(t.id)) taskTitleById.set(t.id, t.title); });
 
-    if (!hasPhotos && !hasTasks && !hasRanking && !hasAnswers) {
+    if (!hasPhotos && !hasTasks && !hasRanking && !hasAnswers && !hasTeams) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
                 <div className="text-center">
@@ -190,11 +191,16 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
         ? visiblePhotos.filter(p => (p.teamName || '').trim() === activeTeam.name.trim())
         : [];
 
+    // Honor optional hidden_team_ids saved on the gallery so the client can hide individual teams
+    const hiddenTeamIds: string[] = ((gallery as any)?.hidden_team_ids as string[]) || [];
+    const visibleTeamLinks = sharedResults.filter(t => !hiddenTeamIds.includes(slugifyTeam(t)));
+
     const tabConfig: { id: TabType; label: string; show: boolean; count?: number }[] = [
         { id: 'photos', label: 'Photos', show: hasPhotos, count: visiblePhotos.length },
         { id: 'ranking', label: 'Ranking', show: hasRanking, count: sharedResults.length },
         { id: 'tasks', label: 'Tasks', show: hasTasks, count: visibleTasks.length },
         { id: 'answers', label: 'Answers', show: hasAnswers, count: sharedResults.length },
+        { id: 'teams', label: 'Team links', show: hasTeams, count: visibleTeamLinks.length },
     ];
     const visibleTabs = tabConfig.filter(t => t.show);
 
@@ -532,6 +538,45 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                     {teamPhotos.length === 0 && (!activeTeam.answers || activeTeam.answers.length === 0) && (
                         <p className="text-zinc-500 text-center py-12 text-sm uppercase tracking-widest">Ingen data for dette hold</p>
                     )}
+                </div>
+            )}
+
+            {/* === TEAMS TAB (per-team share links) === */}
+            {activeTab === 'teams' && hasTeams && (
+                <div className="px-4 md:px-8 py-6 max-w-3xl mx-auto">
+                    <h2 className="text-white text-lg font-black uppercase tracking-wider mb-1">Team-links</h2>
+                    <p className="text-zinc-500 text-xs mb-5">Klik et hold for at kopiere det direkte link.</p>
+                    <div className="space-y-2">
+                        {visibleTeamLinks.map(team => {
+                            const teamSlug = slugifyTeam(team);
+                            const url = `${window.location.origin}?client=${gameId}&section=ranking&team=${encodeURIComponent(teamSlug)}${urlShow ? `&show=${urlShow}` : ''}`;
+                            const isCopied = selectedIds.has(`team-${teamSlug}`);
+                            return (
+                                <button
+                                    key={teamSlug}
+                                    onClick={async () => {
+                                        try { await navigator.clipboard.writeText(url); } catch { window.prompt('Kopiér link:', url); }
+                                        setSelectedIds(prev => { const next = new Set(prev); next.add(`team-${teamSlug}`); return next; });
+                                        setTimeout(() => setSelectedIds(prev => { const next = new Set(prev); next.delete(`team-${teamSlug}`); return next; }), 2000);
+                                    }}
+                                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 hover:border-orange-500/40 hover:bg-zinc-900 transition-all text-left"
+                                >
+                                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-black shrink-0" style={{ backgroundColor: team.color || '#52525b', color: '#fff' }}>
+                                        #{team.position}
+                                    </div>
+                                    <div className="flex-grow min-w-0">
+                                        <p className="text-white font-bold text-sm uppercase truncate">{team.name}</p>
+                                        <p className="text-zinc-500 text-[11px] font-mono truncate">{url}</p>
+                                    </div>
+                                    <span className={`shrink-0 px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-wider ${
+                                        isCopied ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'
+                                    }`}>
+                                        {isCopied ? 'Kopieret!' : 'Kopier'}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 

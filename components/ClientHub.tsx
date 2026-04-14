@@ -292,66 +292,58 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
                 {/* === SHARE TAB === */}
                 {tab === 'share' && (
                     <div className="p-6 max-w-2xl mx-auto space-y-8">
-                        {/* Section selector */}
-                        <div>
-                            <h3 className="text-white font-black uppercase tracking-wider text-sm mb-1">Hvad skal klienten kunne se?</h3>
-                            <p className="text-zinc-500 text-xs mb-4">Afkryds 1-3. Valget indlejres i linket.</p>
-                            <div className="grid grid-cols-3 gap-3">
-                                {([
-                                    { key: 'tasks' as const, label: 'Tasks', desc: `${visibleTaskIds.size} synlige` },
-                                    { key: 'gallery' as const, label: 'Billeder', desc: `${visiblePhotos.length} billeder` },
-                                    { key: 'ranking' as const, label: 'Ranking', desc: `${results.length} hold` },
-                                ]).map(s => {
-                                    const active = sections[s.key];
-                                    return (
-                                        <button key={s.key} onClick={() => toggleSection(s.key)}
-                                            className={`text-left p-4 rounded-xl border transition-all ${
-                                                active
-                                                    ? 'bg-orange-600/10 border-orange-500/50 shadow-[0_0_15px_rgba(234,88,12,0.15)]'
-                                                    : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-600'
-                                            }`}>
-                                            <div className="flex items-start gap-3">
-                                                <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 transition-all ${
-                                                    active ? 'bg-orange-500 text-white' : 'bg-zinc-800 border border-zinc-600 text-zinc-500'
-                                                }`}>
-                                                    {active && (
-                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                                                            <polyline points="20 6 9 17 4 12" />
-                                                        </svg>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <p className={`font-bold text-sm uppercase tracking-wide ${active ? 'text-orange-400' : 'text-white'}`}>{s.label}</p>
-                                                    <p className="text-zinc-500 text-[11px]">{s.desc}</p>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Master client link */}
+                        {/* Master client link with embedded section checkboxes */}
                         <div>
                             <h3 className="text-white font-black uppercase tracking-wider text-sm mb-3">Client link</h3>
-                            <button onClick={() => copyLink('client', getClientShareUrlWithSections(gameId, sections))}
-                                disabled={!sections.tasks && !sections.gallery && !sections.ranking && !sections.answers}
-                                className="w-full p-5 rounded-2xl bg-orange-600/10 border border-orange-500/40 hover:bg-orange-600/20 hover:border-orange-500/60 transition-all text-left group disabled:opacity-40 disabled:cursor-not-allowed">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="min-w-0">
-                                        <p className="text-white font-black uppercase tracking-wider text-sm">Fælles client side</p>
-                                        <p className="text-zinc-400 text-xs mt-1">
-                                            {[sections.tasks && 'Tasks', sections.gallery && 'Billeder', sections.ranking && 'Ranking'].filter(Boolean).join(' • ') || 'Vælg mindst én sektion ovenfor'}
-                                        </p>
-                                        <p className="text-zinc-600 text-[10px] font-mono mt-2 break-all">{getClientShareUrlWithSections(gameId, sections)}</p>
-                                    </div>
+                            <div className="p-5 rounded-2xl bg-orange-600/10 border border-orange-500/40">
+                                <p className="text-white font-black uppercase tracking-wider text-sm">Fælles client side</p>
+                                <p className="text-zinc-500 text-xs mt-1 mb-4">Afkryds 1-3. Valget indlejres i linket.</p>
+
+                                {/* Inline checkboxes */}
+                                <div className="grid grid-cols-3 gap-2 mb-4">
+                                    {([
+                                        { key: 'tasks' as const, label: 'Tasks', desc: `${visibleTaskIds.size} synlige` },
+                                        { key: 'gallery' as const, label: 'Billeder', desc: `${visiblePhotos.length} billeder` },
+                                        { key: 'ranking' as const, label: 'Ranking', desc: `${results.length} hold` },
+                                    ]).map(s => {
+                                        const active = sections[s.key];
+                                        return (
+                                            <button key={s.key} onClick={() => toggleSection(s.key)}
+                                                className={`text-left p-3 rounded-lg border transition-all ${
+                                                    active
+                                                        ? 'bg-orange-500/20 border-orange-400/60'
+                                                        : 'bg-zinc-900/60 border-zinc-700 hover:border-zinc-500'
+                                                }`}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all ${
+                                                        active ? 'bg-orange-500 text-white' : 'bg-zinc-800 border border-zinc-600'
+                                                    }`}>
+                                                        {active && (
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                                                <polyline points="20 6 9 17 4 12" />
+                                                            </svg>
+                                                        )}
+                                                    </div>
+                                                    <p className={`font-bold text-xs uppercase tracking-wide ${active ? 'text-orange-300' : 'text-white'}`}>{s.label}</p>
+                                                </div>
+                                                <p className="text-zinc-500 text-[10px] mt-1 ml-6">{s.desc}</p>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* URL + copy */}
+                                <button onClick={() => copyLink('client', getClientShareUrlWithSections(gameId, sections))}
+                                    disabled={!sections.tasks && !sections.gallery && !sections.ranking && !sections.answers}
+                                    className="w-full flex items-center justify-between gap-4 p-3 rounded-lg bg-zinc-900/60 border border-zinc-700 hover:border-orange-500/60 transition-all group disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <p className="text-zinc-400 text-[11px] font-mono break-all text-left min-w-0 flex-grow">{getClientShareUrlWithSections(gameId, sections)}</p>
                                     <div className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                                         copied === 'client' ? 'bg-green-600 text-white' : 'bg-orange-600 text-white group-hover:bg-orange-500'
                                     }`}>
                                         {copied === 'client' ? 'Kopieret!' : 'Kopier'}
                                     </div>
-                                </div>
-                            </button>
+                                </button>
+                            </div>
                         </div>
 
                         {/* Direct section links */}

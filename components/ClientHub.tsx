@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GameTask, GamePhoto, PlayerResult } from '../types';
-import { saveSharedTasks, fetchSharedTasks, getClientShareUrl, SharedTaskData } from '../services/taskShareService';
-import { saveGallery, fetchGallery, getGalleryShareUrl, getClientSectionUrl, getClientShareUrlWithSections, ShareSections, DEFAULT_SECTIONS } from '../services/galleryService';
+import { saveSharedTasks, fetchSharedTasks, SharedTaskData } from '../services/taskShareService';
+import { saveGallery, fetchGallery, getClientSectionUrl, getClientShareUrlWithSections, ShareSections, DEFAULT_SECTIONS } from '../services/galleryService';
 
 type TabType = 'tasks' | 'photos' | 'share';
 type SectionKey = 'gallery' | 'ranking' | 'tasks' | 'answers';

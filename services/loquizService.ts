@@ -195,6 +195,7 @@ export const fetchGameResults = async (gameId: string, apiKey: string): Promise<
                   }).filter((a: any) => a.taskId !== 'unknown-id');
 
                   return {
+                      id: team.id || team.teamId || team._id,
                       position: team.position || index + 1,
                       name: team.name || team.teamName || 'Unknown Team',
                       score: team.totalScore ?? team.answersScore ?? team.score ?? 0,
@@ -257,6 +258,12 @@ export const fetchGamePhotos = async (gameId: string, apiKey: string): Promise<G
         }
     } catch (e) {}
 
+    // Hardcoded blocklist of known broken/unwanted media URLs (matched against the resolved URL)
+    const BLOCKED_URL_SUBSTRINGS = [
+        'XTHAoAxIl%3AeJwsw2ktQLyfQvYI68TWQ2%3AAPA91bE1a_o_9euZqo2CyFs8y_z-08OGYi7LGNEfqFWSuUXwcVOuWJzEJaLS8INtYMPBGwDVhiUDLadc9Xifahfbgw7B_wHkGQVMbtSpQ4y3eKF41NLOybU%2FHP9gbwjxP.mp4',
+    ];
+    const isBlocked = (u: string) => !!u && BLOCKED_URL_SUBSTRINGS.some(s => u.includes(s));
+
     const seenUrls = new Set<string>();
     const isVideoUrl = (u: string) => /\.(mp4|webm|mov|m4v|ogv|avi)(\?|#|$)/i.test(u);
     const isVideoMeta = (p: any): boolean => {
@@ -282,7 +289,7 @@ export const fetchGamePhotos = async (gameId: string, apiKey: string): Promise<G
             };
         })
         .filter(p => {
-            if (!p.url || seenUrls.has(p.url)) return false;
+            if (!p.url || seenUrls.has(p.url) || isBlocked(p.url)) return false;
             seenUrls.add(p.url);
             return true;
         });

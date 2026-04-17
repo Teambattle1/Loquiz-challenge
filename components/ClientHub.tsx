@@ -12,6 +12,7 @@ interface ClientHubProps {
     results: PlayerResult[];
     gameId: string;
     gameName: string | null;
+    onBack?: () => void;
 }
 
 const stripHtml = (html: string): string => {
@@ -41,7 +42,7 @@ const getShortIntro = (task: GameTask): string => {
     return extractText(raw.shortIntro) || extractText(raw.short_intro) || extractText(raw.comments?.shortIntro) || task.shortIntro || '';
 };
 
-const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, gameName }) => {
+const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, gameName, onBack }) => {
     const [tab, setTab] = useState<TabType>('tasks');
 
     // Task state
@@ -163,7 +164,18 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
             {/* Header with tabs */}
             <div className="px-6 py-4 border-b border-zinc-800 shrink-0">
                 <div className="flex items-center justify-between gap-4 mb-3">
-                    <h2 className="text-xl font-black text-white uppercase tracking-wider">Client Hub</h2>
+                    <div className="flex items-center gap-3">
+                        {onBack && (
+                            <button onClick={onBack}
+                                aria-label="Tilbage"
+                                className="p-2 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white hover:border-zinc-500 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                        )}
+                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Client Hub</h2>
+                    </div>
                     <div className="flex items-center gap-2">
                         {tab === 'tasks' && (
                             <>

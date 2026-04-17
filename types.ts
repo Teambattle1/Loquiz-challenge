@@ -7,6 +7,7 @@ export interface PlayerAnswer {
 }
 
 export interface PlayerResult {
+  id?: string;
   position: number;
   name: string;
   score: number;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQueryState, parseAsString, parseAsStringLiteral } from 'nuqs';
 import LoquizResults from './components/LoquizResults';
 import GameListPage from './components/GameListPage';
 import ApiKeyInput from './components/ApiKeyInput';
@@ -17,6 +18,10 @@ import { HouseIcon } from './components/icons';
 // Define the exact allowed view states
 type ViewState = 'login' | 'lobby' | 'dashboard' | 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin' | 'client-tasks';
 
+// Sub-view values that live in the ?view= query param (dashboard is the implicit default when ?game= is set)
+type SubView = 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin' | 'client-tasks';
+const SUB_VIEWS: SubView[] = ['results', 'showtime', 'taskmaster', 'timeline', 'results-reveal', 'admin', 'client-tasks'];
+
 // PASTE YOUR API KEY HERE - Leave empty to use manual input
 const HARDCODED_API_KEY: string = "ApiKey-v1 63f6bec47b2cc86eb52ea7d84f2f96e250ab87544074cec8949d5862d368c154";
 
@@ -29,17 +34,6 @@ const getGalleryIdFromUrl = (): string | null => {
 const getClientIdFromUrl = (): string | null => {
   const params = new URLSearchParams(window.location.search);
   return params.get('client');
-};
-
-// Check for ?game=GAMEID (optionally &view=results|showtime|...) — internal session deep-link
-const getSessionFromUrl = (): { gameId: string; view?: ViewState } | null => {
-  const params = new URLSearchParams(window.location.search);
-  const gameId = params.get('game');
-  if (!gameId) return null;
-  const viewParam = params.get('view') as ViewState | null;
-  const allowed: ViewState[] = ['dashboard', 'results', 'showtime', 'taskmaster', 'timeline', 'results-reveal', 'admin', 'client-tasks'];
-  const view = viewParam && allowed.includes(viewParam) ? viewParam : undefined;
-  return { gameId, view };
 };
 
 export const buildSessionUrl = (gameId: string, view?: Exclude<ViewState, 'login' | 'lobby'>): string => {
@@ -68,8 +62,16 @@ const App: React.FC = () => {
 };
 
 const MainApp: React.FC = () => {
-  const initialSession = getSessionFromUrl();
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(initialSession?.gameId || null);
+  // nuqs URL state — pushes history entries so the browser back button navigates within the app
+  const [selectedGameId, setSelectedGameId] = useQueryState(
+    'game',
+    parseAsString.withOptions({ history: 'push' })
+  );
+  const [subView, setSubView] = useQueryState<SubView>(
+    'view',
+    parseAsStringLiteral(SUB_VIEWS).withOptions({ history: 'push' })
+  );
+
   const [gameName, setGameName] = useState<string | null>(null);
 
   // Initialize key with hardcoded value or from localStorage
@@ -80,12 +82,12 @@ const MainApp: React.FC = () => {
     return localStorage.getItem('loquiz_api_key') || null;
   });
 
-  const [currentView, setCurrentView] = useState<ViewState>(() => {
-    const initialKey = HARDCODED_API_KEY || localStorage.getItem('loquiz_api_key');
-    if (!initialKey) return 'login';
-    if (initialSession?.gameId) return initialSession.view || 'dashboard';
-    return 'lobby';
-  });
+  // Derive currentView from apiKey + URL params
+  const currentView: ViewState = !apiKey
+    ? 'login'
+    : !selectedGameId
+      ? 'lobby'
+      : (subView || 'dashboard');
 
   // Data state for sub-views
   const [results, setResults] = useState<PlayerResult[]>([]);
@@ -123,15 +125,6 @@ const MainApp: React.FC = () => {
     }
   }, []);
 
-  // Sync currentView when login/logout changes
-  useEffect(() => {
-    if (!apiKey) {
-      setCurrentView('login');
-    } else if (!selectedGameId && !['login'].includes(currentView)) {
-      setCurrentView('lobby');
-    }
-  }, [apiKey]);
-
   // Preload data when a game is selected
   useEffect(() => {
     if (selectedGameId && apiKey) {
@@ -140,46 +133,22 @@ const MainApp: React.FC = () => {
     }
   }, [selectedGameId, apiKey, loadGameData]);
 
-  // Keep URL in sync with current session/view so the address bar is always shareable
-  useEffect(() => {
-    if (currentView === 'login' || currentView === 'lobby' || !selectedGameId) {
-      // Strip any ?game=... from the URL
-      const params = new URLSearchParams(window.location.search);
-      if (params.has('game') || params.has('view')) {
-        params.delete('game');
-        params.delete('view');
-        const qs = params.toString();
-        const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
-        window.history.replaceState({}, '', newUrl);
-      }
-      return;
-    }
-    const params = new URLSearchParams(window.location.search);
-    params.set('game', selectedGameId);
-    if (currentView && currentView !== 'dashboard') params.set('view', currentView);
-    else params.delete('view');
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
-    if (newUrl !== `${window.location.pathname}${window.location.search}`) {
-      window.history.replaceState({}, '', newUrl);
-    }
-  }, [selectedGameId, currentView]);
-
   const viewResults = (gameId: string) => {
+    setSubView(null);
     setSelectedGameId(gameId);
-    setCurrentView('dashboard');
   };
 
   const goBackToLobby = () => {
+    setSubView(null);
     setSelectedGameId(null);
     setResults([]);
     setTasks([]);
     setPhotos([]);
     setDataLoaded(false);
-    setCurrentView('lobby');
   };
 
   const goBackToDashboard = () => {
-    setCurrentView('dashboard');
+    setSubView(null);
   };
 
   const handleLogout = () => {
@@ -203,12 +172,12 @@ const MainApp: React.FC = () => {
     setApiKey("GUEST");
   };
 
-  const handleNavigate = (view: 'results' | 'showtime' | 'taskmaster' | 'timeline' | 'results-reveal' | 'admin' | 'client-tasks') => {
-    setCurrentView(view);
+  const handleNavigate = (view: SubView) => {
+    setSubView(view);
   };
 
   const handleShowtimeComplete = () => {
-    setCurrentView('results-reveal');
+    setSubView('results-reveal');
   };
 
   const isHardcoded = !!(HARDCODED_API_KEY && HARDCODED_API_KEY.trim() !== "");
@@ -224,6 +193,10 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 lg:p-8 transition-all duration-500 relative">
+      {currentView !== 'login' && currentView !== 'lobby' && (
+        <BackButton />
+      )}
+
       <div className="w-full max-w-6xl flex items-center justify-center z-10 my-auto">
         {currentView === 'login' && (
           <ApiKeyInput onKeySubmit={handleKeySubmit} />
@@ -258,14 +231,12 @@ const MainApp: React.FC = () => {
 
         {currentView === 'taskmaster' && selectedGameId && dataLoaded && (
           <div className="w-full max-w-[98vw] h-[80vh] glass-panel rounded-3xl overflow-hidden border-t-8 border-t-orange-600 flex flex-col shadow-[0_40px_80px_rgba(0,0,0,0.7)] relative">
-            <BackButton />
             <TaskMaster tasks={tasks} results={results} />
           </div>
         )}
 
         {currentView === 'timeline' && selectedGameId && dataLoaded && (
           <div className="w-full max-w-[98vw] h-[80vh] glass-panel rounded-3xl overflow-hidden border-t-8 border-t-purple-600 flex flex-col shadow-[0_40px_80px_rgba(0,0,0,0.7)] relative">
-            <BackButton />
             <Timeline tasks={tasks} results={results} />
           </div>
         )}
@@ -276,8 +247,7 @@ const MainApp: React.FC = () => {
 
         {currentView === 'client-tasks' && selectedGameId && dataLoaded && (
           <div className="w-full max-w-[98vw] h-[80vh] glass-panel rounded-3xl overflow-hidden border-t-8 border-t-orange-600 flex flex-col shadow-[0_40px_80px_rgba(0,0,0,0.7)] relative">
-            <BackButton />
-            <ClientHub tasks={tasks} photos={photos} gameId={selectedGameId} gameName={gameName} />
+            <ClientHub tasks={tasks} photos={photos} results={results} gameId={selectedGameId} gameName={gameName} onBack={goBackToDashboard} />
           </div>
         )}
 

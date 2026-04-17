@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchGameInfo } from '../services/loquizService';
-import { HouseIcon, TrophyIcon, CameraIcon, ChartIcon, ClockIcon, GearIcon, ListIcon } from './icons';
+import { TrophyIcon, CameraIcon, ChartIcon, ClockIcon, GearIcon, ListIcon } from './icons';
 
 interface SessionDashboardProps {
     apiKey: string;
@@ -57,11 +57,6 @@ const SessionDashboard: React.FC<SessionDashboardProps> = ({ apiKey, gameId, onB
 
     return (
         <div className="w-full flex flex-col items-center justify-center min-h-[80vh] animate-fade-in px-4">
-            <div className="fixed top-3 left-3 z-50">
-                <button onClick={onBack} className="p-2.5 bg-black/80 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl backdrop-blur-sm">
-                    <HouseIcon className="w-5 h-5 md:w-6 md:h-6" />
-                </button>
-            </div>
 
             {gameLogo && (
                 <div className="mb-8 animate-fade-in">

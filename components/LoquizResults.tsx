@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PlayerResult } from '../types';
 import { fetchGameResults, fetchGameInfo } from '../services/loquizService';
 import LiveToast from './LiveToast';
-import { HouseIcon, TrophyIcon } from './icons';
+import { TrophyIcon } from './icons';
 
 interface LoquizResultsProps {
     apiKey: string;
@@ -123,11 +123,6 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
 
     if (!results || results.length === 0) return (
         <div className="w-full flex flex-col items-center pt-32 px-4 animate-fade-in">
-            <div className="fixed top-3 left-3 z-50">
-                <button onClick={onBack} className="p-2.5 bg-black/80 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl backdrop-blur-sm">
-                    <HouseIcon className="w-5 h-5 md:w-6 md:h-6" />
-                </button>
-            </div>
             <div className="text-center glass-panel p-12 rounded-3xl border border-white/5 max-w-2xl">
                 <h1 className="text-4xl font-black text-white uppercase mb-4 tracking-tighter">No Active Signals</h1>
                 <p className="text-zinc-500 font-bold uppercase tracking-widest text-sm mb-8">This game code exists, but no scores or team results were found on the server.</p>
@@ -142,12 +137,6 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
     return (
         <div className="w-full max-w-full px-2 md:px-4 flex flex-col items-center relative z-10 h-full pt-20 md:pt-24">
             {liveEvent && <LiveToast message={liveEvent.message} subtext={liveEvent.subtext} />}
-
-            <div className="fixed top-3 left-3 z-50">
-                <button onClick={onBack} className="p-2.5 bg-black/80 hover:bg-orange-600 text-orange-500 hover:text-white rounded-full transition-all border border-orange-500/30 shadow-2xl backdrop-blur-sm">
-                    <HouseIcon className="w-5 h-5 md:w-6 md:h-6" />
-                </button>
-            </div>
 
             <div className="w-full text-center mb-6">
                 <h1 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter drop-shadow-2xl">Results</h1>

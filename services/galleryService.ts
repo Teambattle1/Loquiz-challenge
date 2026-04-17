@@ -12,7 +12,7 @@ export interface ShareSections {
 export const DEFAULT_SECTIONS: ShareSections = {
     gallery: true,
     ranking: true,
-    tasks: true,
+    tasks: false,
     answers: false,
     teams: false,
 };
@@ -92,7 +92,7 @@ export const fetchGallery = async (gameId: string): Promise<SharedGallery | null
         .from('shared_galleries')
         .select('*')
         .eq('game_id', gameId)
-        .single();
+        .maybeSingle();
     if (error || !data) return null;
     return data as SharedGallery;
 };

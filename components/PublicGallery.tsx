@@ -64,7 +64,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     }, [gameId]);
 
     const visiblePhotos: GamePhoto[] = gallery
-        ? (gallery.photos as GamePhoto[]).filter(p => !gallery.hidden_ids.includes(p.id))
+        ? ((gallery.photos as GamePhoto[]) || []).filter(p => !(gallery.hidden_ids || []).includes(p.id))
         : [];
 
     const toggleSelect = (id: string) => {
@@ -153,7 +153,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     }
 
     const visibleTasks: SharedTaskData[] = sharedTasks
-        ? sharedTasks.tasks.filter(t => sharedTasks.visible_task_ids.includes(t.id))
+        ? (sharedTasks.tasks || []).filter(t => (sharedTasks.visible_task_ids || []).includes(t.id))
         : [];
 
     // URL ?show=tasks,photos,ranking overrides DB sections so the link is self-sufficient
@@ -171,7 +171,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     // Build task title lookup for the answers view
     const taskTitleById = new Map<string, string>();
     visibleTasks.forEach(t => taskTitleById.set(t.id, t.title));
-    if (sharedTasks) sharedTasks.tasks.forEach(t => { if (!taskTitleById.has(t.id)) taskTitleById.set(t.id, t.title); });
+    if (sharedTasks) (sharedTasks.tasks || []).forEach(t => { if (!taskTitleById.has(t.id)) taskTitleById.set(t.id, t.title); });
 
     if (!hasPhotos && !hasTasks && !hasRanking && !hasAnswers && !hasTeams) {
         return (

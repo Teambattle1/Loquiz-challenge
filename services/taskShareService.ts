@@ -40,7 +40,7 @@ export const fetchSharedTasks = async (gameId: string): Promise<SharedTasks | nu
         .from('shared_tasks')
         .select('*')
         .eq('game_id', gameId)
-        .single();
+        .maybeSingle();
     if (error || !data) return null;
     return data as SharedTasks;
 };

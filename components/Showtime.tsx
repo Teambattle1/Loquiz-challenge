@@ -40,15 +40,34 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
     const [hiddenIds, setHiddenIds] = useState<Set<string>>(getStoredHidden);
     const [shareMsg, setShareMsg] = useState<string | null>(null);
     const [preloadDone, setPreloadDone] = useState(false);
+    const [taskFilter, setTaskFilter] = useState<string | null>(null);
     const music = useMusicPlayer();
     const showtimeCompleteTriggered = useRef(false);
 
-    // Slideshow photos — selected subset or all visible (excluding hidden)
+    // Unique task titles with counts — for filter badges
+    const taskFilters = useMemo(() => {
+        const counts = new Map<string, number>();
+        photos.forEach(p => {
+            const title = (p.taskTitle || 'Photo').trim();
+            counts.set(title, (counts.get(title) || 0) + 1);
+        });
+        return [...counts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([title, count]) => ({ title, count }));
+    }, [photos]);
+
+    // Photos visible in the grid, narrowed by the active task filter
+    const filteredPhotos = useMemo(() => {
+        if (!taskFilter) return photos;
+        return photos.filter(p => (p.taskTitle || 'Photo').trim() === taskFilter);
+    }, [photos, taskFilter]);
+
+    // Slideshow photos — selected subset or all visible (excluding hidden + task filter)
     const slideshowPhotos = useMemo(() => {
-        const visible = photos.filter(p => !hiddenIds.has(p.id));
+        const visible = filteredPhotos.filter(p => !hiddenIds.has(p.id));
         if (selectedIds.size === 0) return visible;
         return visible.filter(p => selectedIds.has(p.id));
-    }, [photos, selectedIds, hiddenIds]);
+    }, [filteredPhotos, selectedIds, hiddenIds]);
 
     // Save duration to localStorage
     const changeDuration = (sec: number) => {
@@ -67,8 +86,8 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
         });
     };
 
-    // Visible photos (not hidden)
-    const visiblePhotos = useMemo(() => photos.filter(p => !hiddenIds.has(p.id)), [photos, hiddenIds]);
+    // Visible photos (not hidden, respects task filter)
+    const visiblePhotos = useMemo(() => filteredPhotos.filter(p => !hiddenIds.has(p.id)), [filteredPhotos, hiddenIds]);
 
     // Share gallery link — saves to Supabase and copies link
     const shareGallery = async () => {
@@ -200,7 +219,7 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
         });
     };
 
-    const selectAll = () => setSelectedIds(new Set(photos.map(p => p.id)));
+    const selectAll = () => setSelectedIds(new Set(filteredPhotos.map(p => p.id)));
     const selectNone = () => setSelectedIds(new Set());
 
     const enterSlideshow = (startIndex?: number) => {
@@ -367,10 +386,52 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                     </div>
                 )}
 
+                {/* Task filter badges */}
+                {taskFilters.length > 1 && (
+                    <div className="flex items-center gap-2 px-4 md:px-6 py-2 bg-black/30 border-b border-zinc-800/50 shrink-0 overflow-x-auto scrollbar-thin scrollbar-thumb-zinc-700">
+                        <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold shrink-0">Task:</span>
+                        <button
+                            onClick={() => setTaskFilter(null)}
+                            className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                taskFilter === null
+                                    ? 'bg-orange-600 text-white border-orange-500 shadow-[0_0_15px_rgba(234,88,12,0.4)]'
+                                    : 'bg-zinc-900/60 text-zinc-400 border-zinc-700 hover:text-white hover:border-zinc-500'
+                            }`}
+                        >
+                            All ({photos.length})
+                        </button>
+                        {taskFilters.map(({ title, count }) => {
+                            const active = taskFilter === title;
+                            return (
+                                <button
+                                    key={title}
+                                    onClick={() => setTaskFilter(active ? null : title)}
+                                    title={title}
+                                    className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all max-w-[200px] truncate ${
+                                        active
+                                            ? 'bg-orange-600 text-white border-orange-500 shadow-[0_0_15px_rgba(234,88,12,0.4)]'
+                                            : 'bg-zinc-900/60 text-zinc-300 border-zinc-700 hover:text-white hover:border-orange-500/60'
+                                    }`}
+                                >
+                                    {title} <span className="opacity-60">({count})</span>
+                                </button>
+                            );
+                        })}
+                        {taskFilter && (
+                            <button
+                                onClick={() => setTaskFilter(null)}
+                                className="shrink-0 ml-auto text-zinc-500 hover:text-orange-400 text-[10px] font-bold uppercase tracking-wider"
+                            >
+                                ✕ Ryd filter
+                            </button>
+                        )}
+                    </div>
+                )}
+
                 {/* Grid */}
                 <div className="flex-grow overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-orange-600 scrollbar-track-zinc-900">
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {photos.map((photo, idx) => {
+                        {filteredPhotos.map((photo, idx) => {
                             const isSelected = selectedIds.has(photo.id);
                             const isHidden = hiddenIds.has(photo.id);
                             return (
@@ -448,9 +509,22 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                                     )}
                                     {/* Hover overlay */}
                                     {!isHidden && (
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 pointer-events-none">
                                             <span className="text-white text-[10px] font-bold uppercase truncate">{photo.teamName || 'Unknown Team'}</span>
-                                            <span className="text-orange-400 text-[9px] uppercase truncate">{photo.taskTitle}</span>
+                                            {photo.taskTitle && (
+                                                <button
+                                                    onClick={e => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        const title = (photo.taskTitle || 'Photo').trim();
+                                                        setTaskFilter(prev => prev === title ? null : title);
+                                                    }}
+                                                    title={`Filter by task: ${photo.taskTitle}`}
+                                                    className="self-start mt-0.5 max-w-full truncate px-1.5 py-0.5 rounded bg-orange-500/20 hover:bg-orange-500 border border-orange-500/40 hover:border-orange-400 text-orange-300 hover:text-white text-[9px] uppercase font-bold tracking-wider transition-all pointer-events-auto"
+                                                >
+                                                    {photo.taskTitle}
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>

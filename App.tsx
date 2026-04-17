@@ -11,6 +11,7 @@ import Timeline from './components/Timeline';
 import ResultsReveal from './components/ResultsReveal';
 import PublicGallery from './components/PublicGallery';
 import ClientHub from './components/ClientHub';
+import LanguageToggle from './components/LanguageToggle';
 import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
 import { PlayerResult, GameTask, GamePhoto } from './types';
 import { HouseIcon } from './components/icons';
@@ -196,6 +197,7 @@ const MainApp: React.FC = () => {
       {currentView !== 'login' && currentView !== 'lobby' && (
         <BackButton />
       )}
+      <LanguageToggle />
 
       <div className="w-full max-w-6xl flex items-center justify-center z-10 my-auto">
         {currentView === 'login' && (

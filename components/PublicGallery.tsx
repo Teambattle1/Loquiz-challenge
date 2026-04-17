@@ -4,6 +4,8 @@ import { useQueryState, parseAsStringLiteral, parseAsString } from 'nuqs';
 import { fetchGallery, SharedGallery, DEFAULT_SECTIONS, ShareSections, decodeShowParam } from '../services/galleryService';
 import { fetchSharedTasks, SharedTasks, SharedTaskData } from '../services/taskShareService';
 import { GamePhoto, PlayerResult } from '../types';
+import { useT } from '../lib/i18n';
+import LanguageToggle from './LanguageToggle';
 
 type TabType = 'photos' | 'tasks' | 'ranking' | 'answers' | 'teams';
 
@@ -22,6 +24,7 @@ const teamInitials = (name: string): string => {
 const SECTION_VALUES = ['photos', 'tasks', 'ranking', 'answers', 'teams'] as const;
 
 const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => {
+    const t = useT();
     const [gallery, setGallery] = useState<SharedGallery | null>(null);
     const [sharedTasks, setSharedTasks] = useState<SharedTasks | null>(null);
     const [loading, setLoading] = useState(true);
@@ -144,9 +147,10 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     if (loading) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
+                <LanguageToggle />
                 <div className="text-center">
                     <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-white font-bold uppercase tracking-widest text-sm">Loading gallery...</p>
+                    <p className="text-white font-bold uppercase tracking-widest text-sm">{t('public.loading')}</p>
                 </div>
             </div>
         );
@@ -187,9 +191,10 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     if (!anySection && !gallery && !sharedTasks) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
+                <LanguageToggle />
                 <div className="text-center">
-                    <p className="text-zinc-500 font-bold uppercase tracking-widest text-lg mb-2">Not found</p>
-                    <p className="text-zinc-600 text-sm">This link may have expired or does not exist.</p>
+                    <p className="text-zinc-500 font-bold uppercase tracking-widest text-lg mb-2">{t('public.notFound.title')}</p>
+                    <p className="text-zinc-600 text-sm">{t('public.notFound.body')}</p>
                 </div>
             </div>
         );
@@ -207,11 +212,11 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     const visibleTeamLinks = sharedResults.filter(t => !hiddenTeamIds.includes(slugifyTeam(t)));
 
     const tabConfig: { id: TabType; label: string; show: boolean; count?: number }[] = [
-        { id: 'photos', label: 'Photos', show: showPhotosTab, count: visiblePhotos.length },
-        { id: 'ranking', label: 'Ranking', show: showRankingTab, count: sharedResults.length },
-        { id: 'tasks', label: 'Tasks', show: showTasksTab, count: visibleTasks.length },
-        { id: 'answers', label: 'Answers', show: showAnswersTab, count: sharedResults.length },
-        { id: 'teams', label: 'Team links', show: showTeamsTab, count: visibleTeamLinks.length },
+        { id: 'photos', label: t('public.tab.photos'), show: showPhotosTab, count: visiblePhotos.length },
+        { id: 'ranking', label: t('public.tab.ranking'), show: showRankingTab, count: sharedResults.length },
+        { id: 'tasks', label: t('public.tab.tasks'), show: showTasksTab, count: visibleTasks.length },
+        { id: 'answers', label: t('public.tab.answers'), show: showAnswersTab, count: sharedResults.length },
+        { id: 'teams', label: t('public.tab.teams'), show: showTeamsTab, count: visibleTeamLinks.length },
     ];
     const visibleTabs = tabConfig.filter(t => t.show);
 
@@ -221,6 +226,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
 
     return (
         <div className="min-h-screen bg-black">
+            <LanguageToggle />
             {/* Header */}
             <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-md border-b border-orange-500/20 px-4 md:px-8 py-4">
                 <div className="flex items-start justify-between gap-4">
@@ -248,8 +254,8 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                         )}
                         {activeTab === 'photos' && hasPhotos && (
                             <p className="text-orange-500 text-xs font-bold uppercase tracking-[0.2em] mt-1">
-                                {visiblePhotos.length} photos
-                                {selectedIds.size > 0 && <span className="text-white ml-2">• {selectedIds.size} selected</span>}
+                                {visiblePhotos.length} {t('public.photos.count')}
+                                {selectedIds.size > 0 && <span className="text-white ml-2">• {selectedIds.size} {t('public.photos.selected')}</span>}
                             </p>
                         )}
                     </div>
@@ -259,7 +265,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                                 onClick={selectedIds.size === visiblePhotos.length ? selectNone : selectAll}
                                 className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white hover:border-zinc-500 transition-all"
                             >
-                                {selectedIds.size === visiblePhotos.length ? 'Fravælg alle' : 'Vælg alle'}
+                                {selectedIds.size === visiblePhotos.length ? t('public.photos.deselectAll') : t('public.photos.selectAll')}
                             </button>
                             {selectedIds.size > 0 && (
                                 <button
@@ -267,7 +273,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                                     disabled={!!zipProgress}
                                     className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-orange-600 text-white border border-orange-500 hover:bg-orange-500 transition-all disabled:opacity-50 shadow-[0_0_15px_rgba(234,88,12,0.3)]"
                                 >
-                                    Download {selectedIds.size} photos
+                                    {t('public.photos.download')} {selectedIds.size} {t('public.photos.count')}
                                 </button>
                             )}
                             <button
@@ -275,7 +281,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                                 disabled={!!zipProgress}
                                 className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-zinc-800 text-orange-400 border border-orange-500/30 hover:bg-orange-600 hover:text-white transition-all disabled:opacity-50"
                             >
-                                Download alle
+                                {t('public.photos.downloadAll')}
                             </button>
                         </div>
                     )}
@@ -431,7 +437,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
             {/* Answers — teams as round icons, click to drill into team detail */}
             {activeTab === 'answers' && hasAnswers && !activeTeam && (
                 <div className="p-4 md:p-8 max-w-5xl mx-auto">
-                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-6 text-center">Klik på et hold for at se billeder og svar</p>
+                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-6 text-center">{t('public.answers.clickTeam')}</p>
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-6">
                         {sharedResults.map(team => {
                             const slug = slugifyTeam(team);
@@ -467,7 +473,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                         onClick={() => setActiveTeamSlug(null)}
                         className="text-zinc-400 hover:text-orange-400 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-1"
                     >
-                        ← Tilbage til hold-oversigt
+                        {t('public.answers.back')}
                     </button>
                     <div className="flex items-center gap-4 mb-6">
                         <div
@@ -479,7 +485,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                         <div>
                             <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter">{activeTeam.name}</h2>
                             <p className="text-orange-500 text-xs font-bold uppercase tracking-widest">
-                                Position #{activeTeam.position} • {activeTeam.score.toLocaleString()} pts
+                                {t('common.position')} #{activeTeam.position} • {activeTeam.score.toLocaleString()} {t('common.points')}
                             </p>
                         </div>
                     </div>
@@ -487,7 +493,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                     {/* Team photos */}
                     {teamPhotos.length > 0 && (
                         <div className="mb-8">
-                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">Billeder ({teamPhotos.length})</h3>
+                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">{t('public.answers.photos')} ({teamPhotos.length})</h3>
                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                                 {teamPhotos.map(photo => (
                                     <a
@@ -515,7 +521,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                     {/* Team answers */}
                     {(activeTeam.answers && activeTeam.answers.length > 0) && (
                         <div>
-                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">Svar ({activeTeam.answers.length})</h3>
+                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">{t('public.answers.answersHeading')} ({activeTeam.answers.length})</h3>
                             <div className="space-y-2">
                                 {activeTeam.answers.map((ans, idx) => {
                                     const title = taskTitleById.get(ans.taskId) || `Task ${ans.taskId}`;
@@ -547,7 +553,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                     )}
 
                     {teamPhotos.length === 0 && (!activeTeam.answers || activeTeam.answers.length === 0) && (
-                        <p className="text-zinc-500 text-center py-12 text-sm uppercase tracking-widest">Ingen data for dette hold</p>
+                        <p className="text-zinc-500 text-center py-12 text-sm uppercase tracking-widest">{t('public.answers.noData')}</p>
                     )}
                 </div>
             )}
@@ -555,8 +561,8 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
             {/* === TEAMS TAB (per-team share links) === */}
             {activeTab === 'teams' && hasTeams && (
                 <div className="px-4 md:px-8 py-6 max-w-3xl mx-auto">
-                    <h2 className="text-white text-lg font-black uppercase tracking-wider mb-1">Team-links</h2>
-                    <p className="text-zinc-500 text-xs mb-5">Klik et hold for at kopiere det direkte link.</p>
+                    <h2 className="text-white text-lg font-black uppercase tracking-wider mb-1">{t('public.teams.heading')}</h2>
+                    <p className="text-zinc-500 text-xs mb-5">{t('public.teams.explainer')}</p>
                     <div className="space-y-2">
                         {visibleTeamLinks.map(team => {
                             const teamSlug = slugifyTeam(team);
@@ -599,19 +605,19 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
               (activeTab === 'teams' && showTeamsTab && !hasTeams)) && (
                 <div className="px-4 md:px-8 py-16 max-w-2xl mx-auto text-center">
                     <p className="text-zinc-500 font-bold uppercase tracking-widest text-sm mb-2">
-                        {activeTab === 'photos' && 'Ingen billeder endnu'}
-                        {activeTab === 'tasks' && 'Ingen tasks delt endnu'}
-                        {activeTab === 'ranking' && 'Ingen resultater endnu'}
-                        {activeTab === 'answers' && 'Ingen svar endnu'}
-                        {activeTab === 'teams' && 'Ingen hold endnu'}
+                        {activeTab === 'photos' && t('public.empty.photos')}
+                        {activeTab === 'tasks' && t('public.empty.tasks')}
+                        {activeTab === 'ranking' && t('public.empty.ranking')}
+                        {activeTab === 'answers' && t('public.empty.answers')}
+                        {activeTab === 'teams' && t('public.empty.teams')}
                     </p>
-                    <p className="text-zinc-600 text-xs">Denne sektion fyldes når spillet er afviklet.</p>
+                    <p className="text-zinc-600 text-xs">{t('public.empty.body')}</p>
                 </div>
             )}
 
             {/* Footer */}
             <div className="text-center py-8">
-                <p className="text-zinc-700 text-xs uppercase tracking-widest">TeamChallenge Photo Gallery</p>
+                <p className="text-zinc-700 text-xs uppercase tracking-widest">{t('public.footer')}</p>
             </div>
         </div>
     );

@@ -159,21 +159,32 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     // URL ?show=tasks,photos,ranking overrides DB sections so the link is self-sufficient
     const urlShow = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('show') : null;
     const urlSections = decodeShowParam(urlShow);
+    const hasExplicitShow = !!urlSections;
     const sections: ShareSections = urlSections || { ...DEFAULT_SECTIONS, ...(gallery?.sections || {}) };
     const sharedResults: PlayerResult[] = (gallery?.results as PlayerResult[]) || [];
 
+    // Tab visibility — when URL explicitly requests sections, render the tab even if empty
+    // so the recipient sees the requested section (with an empty-state message) instead of "Not found"
     const hasPhotos = !!gallery && visiblePhotos.length > 0 && sections.gallery;
     const hasTasks = visibleTasks.length > 0 && sections.tasks;
     const hasRanking = sharedResults.length > 0 && sections.ranking;
     const hasAnswers = sharedResults.length > 0 && sections.answers;
     const hasTeams = sharedResults.length > 0 && sections.teams;
 
+    const showPhotosTab = sections.gallery && (hasPhotos || hasExplicitShow);
+    const showTasksTab = sections.tasks && (hasTasks || hasExplicitShow);
+    const showRankingTab = sections.ranking && (hasRanking || hasExplicitShow);
+    const showAnswersTab = sections.answers && (hasAnswers || hasExplicitShow);
+    const showTeamsTab = sections.teams && (hasTeams || hasExplicitShow);
+
     // Build task title lookup for the answers view
     const taskTitleById = new Map<string, string>();
     visibleTasks.forEach(t => taskTitleById.set(t.id, t.title));
     if (sharedTasks) (sharedTasks.tasks || []).forEach(t => { if (!taskTitleById.has(t.id)) taskTitleById.set(t.id, t.title); });
 
-    if (!hasPhotos && !hasTasks && !hasRanking && !hasAnswers && !hasTeams) {
+    // "Not found" only when there's absolutely nothing to render — no DB row AND no explicit URL sections
+    const anySection = showPhotosTab || showTasksTab || showRankingTab || showAnswersTab || showTeamsTab;
+    if (!anySection && !gallery && !sharedTasks) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
                 <div className="text-center">
@@ -196,11 +207,11 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     const visibleTeamLinks = sharedResults.filter(t => !hiddenTeamIds.includes(slugifyTeam(t)));
 
     const tabConfig: { id: TabType; label: string; show: boolean; count?: number }[] = [
-        { id: 'photos', label: 'Photos', show: hasPhotos, count: visiblePhotos.length },
-        { id: 'ranking', label: 'Ranking', show: hasRanking, count: sharedResults.length },
-        { id: 'tasks', label: 'Tasks', show: hasTasks, count: visibleTasks.length },
-        { id: 'answers', label: 'Answers', show: hasAnswers, count: sharedResults.length },
-        { id: 'teams', label: 'Team links', show: hasTeams, count: visibleTeamLinks.length },
+        { id: 'photos', label: 'Photos', show: showPhotosTab, count: visiblePhotos.length },
+        { id: 'ranking', label: 'Ranking', show: showRankingTab, count: sharedResults.length },
+        { id: 'tasks', label: 'Tasks', show: showTasksTab, count: visibleTasks.length },
+        { id: 'answers', label: 'Answers', show: showAnswersTab, count: sharedResults.length },
+        { id: 'teams', label: 'Team links', show: showTeamsTab, count: visibleTeamLinks.length },
     ];
     const visibleTabs = tabConfig.filter(t => t.show);
 
@@ -577,6 +588,24 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
                             );
                         })}
                     </div>
+                </div>
+            )}
+
+            {/* Empty-state fallbacks — rendered when a requested section has no data yet */}
+            {((activeTab === 'photos' && showPhotosTab && !hasPhotos) ||
+              (activeTab === 'tasks' && showTasksTab && !hasTasks) ||
+              (activeTab === 'ranking' && showRankingTab && !hasRanking) ||
+              (activeTab === 'answers' && showAnswersTab && !hasAnswers) ||
+              (activeTab === 'teams' && showTeamsTab && !hasTeams)) && (
+                <div className="px-4 md:px-8 py-16 max-w-2xl mx-auto text-center">
+                    <p className="text-zinc-500 font-bold uppercase tracking-widest text-sm mb-2">
+                        {activeTab === 'photos' && 'Ingen billeder endnu'}
+                        {activeTab === 'tasks' && 'Ingen tasks delt endnu'}
+                        {activeTab === 'ranking' && 'Ingen resultater endnu'}
+                        {activeTab === 'answers' && 'Ingen svar endnu'}
+                        {activeTab === 'teams' && 'Ingen hold endnu'}
+                    </p>
+                    <p className="text-zinc-600 text-xs">Denne sektion fyldes når spillet er afviklet.</p>
                 </div>
             )}
 

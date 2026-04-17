@@ -14,7 +14,7 @@ export const DEFAULT_SECTIONS: ShareSections = {
     ranking: true,
     tasks: false,
     answers: false,
-    teams: false,
+    teams: true,
 };
 
 // Encode the selected sections into a short URL token (e.g. "tasks,photos,ranking")

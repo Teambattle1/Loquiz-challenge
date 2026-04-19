@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(netlify status:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cat C:\\\\\\\\Users\\\\\\\\ThomasSunke\\\\\\\\Github\\\\\\\\LOQUIZ\\\\\\\\.claude\\\\\\\\launch.json)"
+    ]
+  }
+}

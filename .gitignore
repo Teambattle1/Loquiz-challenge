@@ -1,5 +1,12 @@
-# Logs
-logs
+# === Credentials and secrets ===
+.env
+.env.local
+.env.*.local
+.env.production
+!.env.example
+
+# === Logs ===
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,21 +14,39 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# === Dependencies ===
+node_modules/
 
-# Editor directories and files
+# === Build output ===
+dist/
+dist-ssr/
+build/
+.vite/
+*.tsbuildinfo
+
+# === Editor directories and files ===
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
+*.swp
+*.swo
+*.sw?
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
 
-# Local Netlify folder
-.netlify
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Netlify ===
+.netlify/
+
+# === Caches & MCP artefacts ===
+.cache/
+.parcel-cache/
+.playwright-mcp/
+
+# === Misc ===
+*.local

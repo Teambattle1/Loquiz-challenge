@@ -122,6 +122,7 @@ const PublicShowtime: React.FC<PublicShowtimeProps> = ({ gameId }) => {
             gameName={gallery.game_name || undefined}
             results={results}
             playbackMode
+            playlistIdOverride={gallery.showtime_playlist_id || null}
             onClose={() => setStage(results.length > 0 ? 'reveal' : 'done')}
             onShowtimeComplete={() => setStage(results.length > 0 ? 'reveal' : 'done')}
         />

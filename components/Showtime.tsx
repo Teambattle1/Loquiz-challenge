@@ -13,6 +13,9 @@ interface ShowtimeProps {
   // When true: skip grid, auto-run the slideshow, hide admin controls.
   // Used by PublicShowtime so the customer lands straight in the reveal flow.
   playbackMode?: boolean;
+  // Override af playlist — bruges af PublicShowtime til at afspille den
+  // playlist admin valgte, siden kunden ikke har adminens localStorage.
+  playlistIdOverride?: string | null;
   onClose: () => void;
   onShowtimeComplete?: () => void;
 }
@@ -30,7 +33,7 @@ const getStoredHidden = (): Set<string> => {
     catch { return new Set(); }
 };
 
-const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onClose, onShowtimeComplete }: ShowtimeProps) => {
+const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, playlistIdOverride, onClose, onShowtimeComplete }: ShowtimeProps) => {
     // In playback mode we skip the grid entirely — show a black screen until
     // the gallery loads and the slideshow auto-starts, so the customer never
     // sees admin chrome.
@@ -89,11 +92,15 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
         return photos.filter(p => (p.taskTitle || 'Photo').trim() === taskFilter);
     }, [photos, taskFilter]);
 
-    // Slideshow photos — selected subset or all visible (excluding hidden + task filter)
+    // Slideshow photos — selection vinder over hidden: hvis admin eksplicit
+    // har valgt et billede, så spiller det uanset skjult-status (sådan kan man
+    // masse-vælge fra ALT i select mode uden først at skulle un-hide alt).
+    // Ingen valg → fald tilbage til "alle synlige".
     const slideshowPhotos = useMemo(() => {
-        const visible = filteredPhotos.filter(p => !hiddenIds.has(p.id));
-        if (selectedIds.size === 0) return visible;
-        return visible.filter(p => selectedIds.has(p.id));
+        if (selectedIds.size > 0) {
+            return filteredPhotos.filter(p => selectedIds.has(p.id));
+        }
+        return filteredPhotos.filter(p => !hiddenIds.has(p.id));
     }, [filteredPhotos, selectedIds, hiddenIds]);
 
     // Save duration to localStorage
@@ -140,6 +147,9 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
         await saveGallery(gameId, gameName || null, photos, [...hiddenIds], {
             selectedPhotoIds: [...selectedIds],
             results,
+            // Persister adminens playlist-valg så kundens public link kan
+            // afspille musikken — kunden har ikke adminens localStorage.
+            showtimePlaylistId: getShowtimePlaylistId(),
         });
         const url = getShowtimeShareUrl(gameId);
         try {
@@ -174,22 +184,20 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
 
         items.forEach(({ url, isVideo }) => {
             if (isVideo) {
-                // Fetch entire video into browser cache so <video> plays instantly
-                fetch(url, { mode: 'cors', credentials: 'omit' })
-                    .then(res => res.blob())
-                    .then(() => checkDone())
-                    .catch(() => {
-                        // Fallback: hidden <video preload="auto">
-                        const v = document.createElement('video');
-                        v.preload = 'auto';
-                        v.muted = true;
-                        v.src = url;
-                        const done = () => { v.oncanplaythrough = null; v.onerror = null; checkDone(); };
-                        v.oncanplaythrough = done;
-                        v.onerror = done;
-                        // Safety timeout so a slow video never blocks start forever
-                        setTimeout(done, 8000);
-                    });
+                // Preload via hidden <video preload="auto">. Vi brugte tidligere
+                // et fetch() først, men Firebase Storage sender ikke CORS-
+                // headers på videoerne, så det kastede altid en CORS-fejl i
+                // konsollen før fallback'et sparkede ind. <video> kræver ikke
+                // CORS for afspilning, så vi går direkte til denne vej.
+                const v = document.createElement('video');
+                v.preload = 'auto';
+                v.muted = true;
+                v.src = url;
+                const done = () => { v.oncanplaythrough = null; v.onerror = null; checkDone(); };
+                v.oncanplaythrough = done;
+                v.onerror = done;
+                // Safety timeout so a slow video never blocks start forever
+                setTimeout(done, 8000);
             } else {
                 const img = new Image();
                 img.onload = checkDone;
@@ -271,6 +279,34 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
     const selectAll = () => setSelectedIds(new Set(filteredPhotos.map(p => p.id)));
     const selectNone = () => setSelectedIds(new Set());
 
+    // Bulk hide/show: admin kan markere flere og skjule/vise dem i ét klik.
+    // Efter handlingen rydder vi selection så det næste bulk-skridt starter rent.
+    const hideSelected = () => {
+        if (selectedIds.size === 0) return;
+        setHiddenIds(prev => {
+            const next = new Set(prev);
+            selectedIds.forEach(id => next.add(id));
+            localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]));
+            return next;
+        });
+        setSelectedIds(new Set());
+    };
+    const showSelected = () => {
+        if (selectedIds.size === 0) return;
+        setHiddenIds(prev => {
+            const next = new Set(prev);
+            selectedIds.forEach(id => next.delete(id));
+            localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]));
+            return next;
+        });
+        setSelectedIds(new Set());
+    };
+    // "Vis alle" = nulstil hidden-state, så default (alt synligt) genoprettes.
+    const showAll = () => {
+        setHiddenIds(new Set());
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify([]));
+    };
+
     const enterSlideshow = (startIndex?: number) => {
         const doStart = () => {
             setCurrentIndex(startIndex ?? 0);
@@ -291,11 +327,14 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
             setView('slideshow');
             setIsPlaying(true);
             setSelectMode(false);
-            const playlistId = getShowtimePlaylistId();
+            // I playbackMode har kunden ikke adminens localStorage, så vi bruger
+            // den override admin har persisteret med gallery-linket. I admin-
+            // mode bruger vi (stadig) adminens localStorage som før.
+            const playlistId = playlistIdOverride ?? getShowtimePlaylistId();
             if (playlistId) music.playPlaylist(playlistId);
         };
         preloadAndStart(doStart);
-    }, [music, preloadAndStart]);
+    }, [music, preloadAndStart, playlistIdOverride]);
 
     // Playback mode: skip grid entirely and jump straight into the showtime flow
     // once the selection has been loaded (so we slideshow the picked photos only).
@@ -357,9 +396,10 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
     if (view === 'grid') {
         return (
             <div className="fixed inset-0 z-50 bg-zinc-950/95 backdrop-blur-xl flex flex-col animate-fade-in">
-                {/* Header */}
+                {/* Header — pl-14 på venstre kolonne så titlen ikke ligger under
+                    den globale hus-ikon BackButton (fixed top-left). */}
                 <div className="p-4 md:p-6 flex justify-between items-center bg-black/40 border-b border-white/5 shrink-0">
-                    <div>
+                    <div className="pl-14 md:pl-16">
                         <h2 className="text-2xl md:text-3xl font-black text-orange-500 uppercase tracking-tighter flex items-center gap-3">
                             Showtime Gallery
                         </h2>
@@ -441,11 +481,45 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
 
                 {/* Select toolbar */}
                 {selectMode && (
-                    <div className="flex items-center gap-3 px-4 md:px-6 py-2 bg-zinc-900/80 border-b border-zinc-800/50 shrink-0">
-                        <span className="text-zinc-500 text-xs uppercase tracking-wider font-bold">Select photos:</span>
-                        <button onClick={selectAll} className="text-orange-400 text-xs font-bold uppercase tracking-wider hover:text-orange-300 transition-colors">All</button>
+                    <div className="flex items-center gap-3 flex-wrap px-4 md:px-6 py-2 bg-zinc-900/80 border-b border-zinc-800/50 shrink-0">
+                        <span className="text-zinc-500 text-xs uppercase tracking-wider font-bold">Vælg:</span>
+                        <button onClick={selectAll} className="text-orange-400 text-xs font-bold uppercase tracking-wider hover:text-orange-300 transition-colors">Alle</button>
                         <span className="text-zinc-700">|</span>
-                        <button onClick={selectNone} className="text-zinc-400 text-xs font-bold uppercase tracking-wider hover:text-white transition-colors">None</button>
+                        <button onClick={selectNone} className="text-zinc-400 text-xs font-bold uppercase tracking-wider hover:text-white transition-colors">Ingen</button>
+
+                        <span className="text-zinc-700 mx-2">•</span>
+                        <span className="text-zinc-500 text-xs uppercase tracking-wider font-bold">Bulk:</span>
+                        <button
+                            onClick={hideSelected}
+                            disabled={selectedIds.size === 0}
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                selectedIds.size === 0
+                                    ? 'bg-zinc-900/60 text-zinc-600 border-zinc-800 cursor-not-allowed'
+                                    : 'bg-red-600/20 text-red-300 border-red-500/40 hover:bg-red-600 hover:text-white'
+                            }`}
+                        >
+                            ✕ Skjul valgte ({selectedIds.size})
+                        </button>
+                        <button
+                            onClick={showSelected}
+                            disabled={selectedIds.size === 0}
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                selectedIds.size === 0
+                                    ? 'bg-zinc-900/60 text-zinc-600 border-zinc-800 cursor-not-allowed'
+                                    : 'bg-green-600/20 text-green-300 border-green-500/40 hover:bg-green-600 hover:text-white'
+                            }`}
+                        >
+                            👁 Vis valgte ({selectedIds.size})
+                        </button>
+                        {hiddenIds.size > 0 && (
+                            <button
+                                onClick={showAll}
+                                className="ml-auto px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-orange-600 hover:text-white hover:border-orange-500 transition-all"
+                                title="Nulstil skjul-status så alle billeder vises igen (default)"
+                            >
+                                ⟲ Nulstil — vis alle {photos.length}
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -501,11 +575,14 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
                                 <div
                                     key={photo.id}
                                     className={`aspect-square relative group cursor-pointer rounded-lg overflow-hidden transition-all hover:scale-105 hover:z-10 bg-zinc-900 ${
-                                        isHidden ? 'opacity-30 border-2 border-red-500/30' :
+                                        // Select mode: skjulte vises normalt, så admin kan masse-vælge.
+                                        // Selection-state vinder over hidden-state visuelt.
                                         selectMode && isSelected
                                             ? 'border-2 border-orange-500 shadow-[0_0_20px_rgba(234,88,12,0.3)]'
                                             : selectMode
-                                            ? 'border-2 border-zinc-700/50 opacity-60 hover:opacity-100'
+                                            ? `border-2 ${isHidden ? 'border-red-500/40' : 'border-zinc-700/50'} opacity-80 hover:opacity-100`
+                                            : isHidden
+                                            ? 'opacity-30 border-2 border-red-500/30'
                                             : 'border border-white/10 hover:border-orange-500/50'
                                     }`}
                                     onClick={() => selectMode ? toggleSelect(photo.id) : !isHidden ? enterSlideshow(idx) : undefined}
@@ -552,8 +629,8 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
                                             {isHidden ? '👁' : '✕'}
                                         </div>
                                     </div>
-                                    {/* Selection indicator */}
-                                    {selectMode && !isHidden && (
+                                    {/* Selection indicator — også på skjulte i select mode */}
+                                    {selectMode && (
                                         <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                                             isSelected ? 'bg-orange-500 border-orange-400' : 'bg-black/50 border-zinc-500'
                                         }`}>
@@ -564,8 +641,9 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
                                             )}
                                         </div>
                                     )}
-                                    {/* Hidden overlay */}
-                                    {isHidden && (
+                                    {/* Hidden overlay — skjul IKKE i select mode, så man kan
+                                        se og masse-vælge skjulte billeder */}
+                                    {isHidden && !selectMode && (
                                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                             <span className="text-red-400 text-xs font-bold uppercase tracking-wider">Skjult</span>
                                         </div>
@@ -766,7 +844,7 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onC
             {/* Progress Bar */}
             <div className="h-1.5 bg-zinc-900 w-full relative shrink-0">
                 <div
-                    className={`h-full transition-all duration-500 ${isShowtimeMode ? 'bg-pink-500' : 'bg-orange-500'}`}
+                    className="h-full transition-all duration-500 bg-orange-500"
                     style={{ width: `${((currentIndex + 1) / slideshowPhotos.length) * 100}%` }}
                 />
             </div>

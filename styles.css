@@ -116,6 +116,41 @@ body::after {
   animation: slow-score-glow 4s ease-in-out infinite;
 }
 
+/* TeamBattle thanks banner — slides in from bottom over the podium */
+@keyframes thanksSlide {
+  0%   { transform: translateY(60vh) scale(0.75); opacity: 0; }
+  55%  { transform: translateY(-10px) scale(1.04); opacity: 1; }
+  75%  { transform: translateY(6px) scale(0.99); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.animate-thanks {
+  animation: thanksSlide 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Soft shimmer across the thanks heading */
+@keyframes thanksShimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+.animate-thanks-shimmer {
+  background: linear-gradient(90deg, #fbbf24, #f97316, #ec4899, #f97316, #fbbf24);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thanksShimmer 4s ease-in-out infinite;
+}
+
+/* Gentle sub-text fade so it lands AFTER the headline */
+@keyframes thanksSubFade {
+  0%, 40% { opacity: 0; transform: translateY(8px); }
+  100%    { opacity: 1; transform: translateY(0); }
+}
+.animate-thanks-sub {
+  opacity: 0;
+  animation: thanksSubFade 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Custom Scrollbar - Orange Theme */
 ::-webkit-scrollbar {
   width: 8px;

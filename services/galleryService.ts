@@ -51,6 +51,9 @@ export interface SharedGallery {
     selected_photo_ids?: string[];
     sections?: ShareSections;
     results?: PlayerResult[];
+    // Playlist admin valgte til Showtime — persisteres så kundens public link
+    // kan afspille musikken (kunden har ikke adminens localStorage).
+    showtime_playlist_id?: string | null;
     created_at: string;
 }
 
@@ -60,7 +63,7 @@ export const saveGallery = async (
     gameName: string | null,
     photos: GamePhoto[],
     hiddenIds: string[],
-    extras?: { sections?: ShareSections; results?: PlayerResult[]; hiddenTeamIds?: string[]; selectedPhotoIds?: string[] }
+    extras?: { sections?: ShareSections; results?: PlayerResult[]; hiddenTeamIds?: string[]; selectedPhotoIds?: string[]; showtimePlaylistId?: string | null }
 ): Promise<void> => {
     const payload: any = {
         game_id: gameId,
@@ -73,6 +76,7 @@ export const saveGallery = async (
     if (extras?.results) payload.results = extras.results;
     if (extras?.hiddenTeamIds) payload.hidden_team_ids = extras.hiddenTeamIds;
     if (extras?.selectedPhotoIds) payload.selected_photo_ids = extras.selectedPhotoIds;
+    if (extras?.showtimePlaylistId !== undefined) payload.showtime_playlist_id = extras.showtimePlaylistId;
     const { error } = await supabase
         .from('shared_galleries')
         .upsert(payload, { onConflict: 'game_id' });

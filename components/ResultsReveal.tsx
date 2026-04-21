@@ -13,7 +13,7 @@ const medalStyles: Record<number, { bg: string; border: string; text: string; ra
     3: { bg: 'bg-orange-600/10', border: 'border-orange-600/30', text: 'text-orange-500', rank: 'text-orange-600', glow: 'shadow-[0_0_20px_rgba(234,88,12,0.1)]', color: '#ea580c' },
 };
 
-type OverlayState = 'none' | 'highlight3' | 'highlight2' | 'winner' | 'podium';
+type OverlayState = 'none' | 'highlight3' | 'highlight2' | 'winner' | 'podium' | 'thanks';
 
 const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
     const sortedResults = [...results].sort((a, b) => a.position - b.position);
@@ -21,6 +21,11 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
 
     const [revealedCount, setRevealedCount] = useState(0);
     const [overlay, setOverlay] = useState<OverlayState>('none');
+    // Gate-screen: browsers block `requestFullscreen` + `audio.play()` without
+    // a user gesture. When ResultsReveal auto-mounts after the showtime
+    // slideshow there is no gesture — so we show a "Ready?" tap-target and run
+    // fullscreen + music from the click handler instead of the mount effect.
+    const [gateOpen, setGateOpen] = useState(true);
     const listRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const winnerAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -60,8 +65,25 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         }
     }, [fadeAudio]);
 
-    // Start winner.mp3 on mount
+    // Cleanup on unmount — audio and fullscreen get set up from the gate click,
+    // not on mount, so we only guarantee teardown here.
     useEffect(() => {
+        return () => {
+            const audio = audioRef.current;
+            if (audio) { audio.pause(); audio.src = ''; audioRef.current = null; }
+            if (winnerAudioRef.current) {
+                winnerAudioRef.current.pause();
+                winnerAudioRef.current.src = '';
+                winnerAudioRef.current = null;
+            }
+            try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch {}
+        };
+    }, []);
+
+    // Gate dismissal — the click here is the user gesture that lets us call
+    // `requestFullscreen` and start audio playback without the browser blocking.
+    const dismissGate = useCallback(() => {
+        setGateOpen(false);
         try { document.documentElement.requestFullscreen?.(); } catch {}
         const audio = new Audio('/winner.mp3');
         audio.loop = true;
@@ -71,17 +93,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             setMusicPlaying(true);
             fadeAudio(audio, 0, TARGET_VOL, FADE_MS);
         }).catch(() => {});
-        return () => {
-            audio.pause(); audio.src = ''; audioRef.current = null;
-            // Also stop winner-reveal.mp3 if playing
-            if (winnerAudioRef.current) {
-                winnerAudioRef.current.pause();
-                winnerAudioRef.current.src = '';
-                winnerAudioRef.current = null;
-            }
-            try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch {}
-        };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [fadeAudio]);
 
     // Scroll to bottom on mount
     useEffect(() => {
@@ -101,17 +113,16 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         const posBeingRevealed = totalTeams - revealedCount;
 
         if (posBeingRevealed === 3) {
-            // Show highlight overlay for #3
+            // Show highlight overlay for #3 — brugeren klikker for at lukke
             setOverlay('highlight3');
             setRevealedCount(prev => prev + 1);
-            setTimeout(() => setOverlay('none'), 3000);
         } else if (posBeingRevealed === 2) {
-            // Show highlight overlay for #2
+            // Show highlight overlay for #2 — brugeren klikker for at lukke
             setOverlay('highlight2');
             setRevealedCount(prev => prev + 1);
-            setTimeout(() => setOverlay('none'), 3000);
         } else if (posBeingRevealed === 1) {
-            // #1: stop bg music, play winner-reveal.mp3, show trophy overlay, then podium
+            // #1: stop bg music, play winner-reveal.mp3, show trophy overlay.
+            // Podium vises først når brugeren selv klikker videre.
             stopMusic();
             try {
                 const wa = new Audio('/winner-reveal.mp3');
@@ -121,12 +132,19 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             } catch {}
             setOverlay('winner');
             setRevealedCount(prev => prev + 1);
-            // After 5s winner overlay → show podium
-            setTimeout(() => setOverlay('podium'), 5000);
         } else {
             setRevealedCount(prev => prev + 1);
         }
     };
+
+    // Når podium har stået i 5s, lader vi en "TeamBattle takker for kampen"
+    // animation svøbe ind over toppen. Brugeren kan selv klikke podium/thanks
+    // videre til luk — vi tvinger ikke lukning efter animationen.
+    useEffect(() => {
+        if (overlay !== 'podium') return;
+        const t = setTimeout(() => setOverlay('thanks'), 5000);
+        return () => clearTimeout(t);
+    }, [overlay]);
 
     const startAutoReveal = () => {
         if (autoRevealing) return;
@@ -165,7 +183,13 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             const target = e.target as HTMLElement | null;
             if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
             e.preventDefault();
-            if (overlay !== 'none') return; // overlay er selv-timeet — lad den køre
+            if (gateOpen) { dismissGate(); return; }
+            // Overlay-klik via spacebar: highlight → luk; winner → podium;
+            // podium → thanks; thanks → luk helt.
+            if (overlay === 'highlight3' || overlay === 'highlight2') { setOverlay('none'); return; }
+            if (overlay === 'winner') { setOverlay('podium'); return; }
+            if (overlay === 'podium') { setOverlay('thanks'); return; }
+            if (overlay === 'thanks') { onClose(); return; }
             if (allRevealed) return;
             if (revealedCount < revealsToTop3) {
                 if (!autoRevealing) startAutoReveal();
@@ -175,7 +199,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         };
         window.addEventListener('keydown', handleKey);
         return () => window.removeEventListener('keydown', handleKey);
-    }, [overlay, allRevealed, revealedCount, revealsToTop3, autoRevealing]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [gateOpen, dismissGate, overlay, allRevealed, revealedCount, revealsToTop3, autoRevealing, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Fullscreen overlays ────────────────────────────────────
     const renderOverlay = () => {
@@ -202,12 +226,13 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             const team = sortedResults.find(p => p.position === 1);
             if (!team) return null;
             return (
-                <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center">
+                <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center cursor-pointer" onClick={() => setOverlay('podium')}>
                     <div className="text-center winner-entrance">
                         <TrophyIcon className="w-32 h-32 md:w-48 md:h-48 text-yellow-400 mx-auto mb-6 trophy-glow" />
                         <p className="text-3xl md:text-5xl font-black uppercase tracking-[0.3em] text-yellow-400 mb-2">Winner</p>
                         <p className="text-5xl md:text-8xl font-black text-white uppercase tracking-tighter mb-4">{team.name}</p>
                         <p className="text-4xl md:text-6xl font-mono font-black text-yellow-400">{team.score.toLocaleString()} pts</p>
+                        <p className="text-zinc-600 text-[11px] uppercase tracking-widest mt-8">Tap to continue</p>
                     </div>
                 </div>
             );
@@ -218,7 +243,7 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
             const p2 = top3.find(t => t.position === 2);
             const p3 = top3.find(t => t.position === 3);
             return (
-                <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center" onClick={onClose}>
+                <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center cursor-pointer" onClick={() => setOverlay('thanks')}>
                     <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter mb-12">Podium</h2>
                     <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4">
                         {/* 2nd place — left, medium height */}
@@ -256,13 +281,130 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
                             </div>
                         )}
                     </div>
-                    <p className="text-zinc-600 text-xs uppercase tracking-widest mt-12">Tap anywhere to close</p>
+                    <p className="text-zinc-600 text-xs uppercase tracking-widest mt-12">Tap for afslutning</p>
+                </div>
+            );
+        }
+
+        // TeamBattle thanks — ligger OVER podium så publikum stadig ser
+        // holdene nedenunder. Klik lukker ResultsReveal helt.
+        if (overlay === 'thanks') {
+            const p1 = top3.find(t => t.position === 1);
+            const p2 = top3.find(t => t.position === 2);
+            const p3 = top3.find(t => t.position === 3);
+            return (
+                <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center cursor-pointer" onClick={onClose}>
+                    {/* Podium i baggrunden (lidt dæmpet) */}
+                    <div className="absolute inset-0 bg-black" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40 pointer-events-none">
+                        <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4">
+                            {p2 && (
+                                <div className="flex flex-col items-center">
+                                    <p className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-2 truncate max-w-[200px]">{p2.name}</p>
+                                    <p className="text-lg md:text-2xl font-mono font-black text-zinc-300 mb-3">{p2.score.toLocaleString()}</p>
+                                    <div className="w-28 md:w-40 rounded-t-xl flex flex-col items-center justify-end pb-4" style={{ height: '180px', background: 'linear-gradient(to top, #71717a, #a1a1aa)' }}>
+                                        <span className="text-4xl md:text-5xl">🥈</span>
+                                        <span className="text-2xl md:text-3xl font-black text-white mt-1">#2</span>
+                                    </div>
+                                </div>
+                            )}
+                            {p1 && (
+                                <div className="flex flex-col items-center">
+                                    <TrophyIcon className="w-12 h-12 md:w-16 md:h-16 text-yellow-400 mb-2" />
+                                    <p className="text-2xl md:text-4xl font-black text-white uppercase tracking-tight mb-2 truncate max-w-[240px]">{p1.name}</p>
+                                    <p className="text-xl md:text-3xl font-mono font-black text-yellow-400 mb-3">{p1.score.toLocaleString()}</p>
+                                    <div className="w-32 md:w-48 rounded-t-xl flex flex-col items-center justify-end pb-4" style={{ height: '240px', background: 'linear-gradient(to top, #a16207, #eab308)' }}>
+                                        <span className="text-5xl md:text-6xl">🥇</span>
+                                        <span className="text-3xl md:text-4xl font-black text-white mt-1">#1</span>
+                                    </div>
+                                </div>
+                            )}
+                            {p3 && (
+                                <div className="flex flex-col items-center">
+                                    <p className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-2 truncate max-w-[200px]">{p3.name}</p>
+                                    <p className="text-lg md:text-2xl font-mono font-black text-orange-500 mb-3">{p3.score.toLocaleString()}</p>
+                                    <div className="w-28 md:w-40 rounded-t-xl flex flex-col items-center justify-end pb-4" style={{ height: '140px', background: 'linear-gradient(to top, #9a3412, #ea580c)' }}>
+                                        <span className="text-4xl md:text-5xl">🥉</span>
+                                        <span className="text-2xl md:text-3xl font-black text-white mt-1">#3</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Thanks-banner animerer ind fra bunden oven på podiet */}
+                    <div className="relative z-10 animate-thanks text-center px-6 max-w-4xl">
+                        <h2
+                            className="text-5xl md:text-8xl font-black uppercase tracking-tighter leading-none mb-6 animate-thanks-shimmer"
+                            style={{ filter: 'drop-shadow(0 6px 24px rgba(251,146,60,0.45))' }}
+                        >
+                            TeamBattle<br />takker for kampen
+                        </h2>
+                        <p className="animate-thanks-sub text-2xl md:text-4xl font-bold text-white/90 uppercase tracking-[0.25em]" style={{ animationDelay: '0.4s' }}>
+                            Håber i havde en god dag!
+                        </p>
+                        <p className="mt-12 text-zinc-500 text-xs uppercase tracking-widest">Tap for afslutning</p>
+                    </div>
                 </div>
             );
         }
 
         return null;
     };
+
+    // ─── Gate screen ────────────────────────────────────────────
+    // Big tap-target that gives the browser its required user gesture before
+    // we call requestFullscreen + start the winner music. Også en elegant
+    // glossy orange knap med hvid overskrift + mørk undertekst.
+    if (gateOpen) {
+        return (
+            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-6 animate-fade-in">
+                <button
+                    onClick={dismissGate}
+                    aria-label="Start score reveal"
+                    className="group relative overflow-hidden rounded-[2rem] px-12 py-16 max-w-2xl w-full border border-orange-300/50 hover:scale-[1.02] active:scale-[0.98] transition-transform duration-300"
+                    style={{
+                        background: 'linear-gradient(180deg, #fb923c 0%, #f97316 45%, #ea580c 100%)',
+                        boxShadow:
+                            '0 30px 80px -20px rgba(234, 88, 12, 0.8),' +
+                            '0 10px 30px -10px rgba(0, 0, 0, 0.6),' +
+                            'inset 0 2px 0 rgba(255, 255, 255, 0.4),' +
+                            'inset 0 -3px 8px rgba(0, 0, 0, 0.18)',
+                    }}
+                >
+                    {/* Glossy top-sheen — slips over halvdelen af knappen og giver et subtilt glasset look */}
+                    <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-[2rem]"
+                        style={{
+                            background: 'linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%)',
+                        }}
+                    />
+                    {/* Soft radial highlight øverst venstre */}
+                    <span
+                        aria-hidden
+                        className="pointer-events-none absolute -top-8 -left-10 w-56 h-56 rounded-full blur-2xl"
+                        style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.45), transparent 70%)' }}
+                    />
+
+                    <div className="relative flex flex-col items-center gap-8">
+                        <TrophyIcon className="w-24 h-24 md:w-32 md:h-32 text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]" />
+                        <div className="text-center">
+                            <h2
+                                className="text-4xl md:text-7xl font-black uppercase tracking-tighter leading-none mb-4 text-white"
+                                style={{ textShadow: '0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.2)' }}
+                            >
+                                Ready to see<br />the score?
+                            </h2>
+                            <p className="text-sm md:text-base font-bold uppercase tracking-[0.3em] text-orange-950/80">
+                                Tap to reveal the winners
+                            </p>
+                        </div>
+                    </div>
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 z-50 bg-black flex flex-col animate-fade-in">

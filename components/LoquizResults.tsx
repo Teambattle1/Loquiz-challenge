@@ -26,9 +26,28 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
     const totalAnswerCountRef = useRef<number>(0);
     const isFirstLoadRef = useRef<boolean>(true);
 
-    const [columns, setColumns] = useState<1 | 2>(1);
+    // Support op til 4 kolonner — på fullscreen desktop kan vi nu vise hele
+    // holdlisten uden scroll selv med 20+ hold.
+    const [columns, setColumns] = useState<1 | 2 | 3 | 4>(1);
     const [hiddenPositions, setHiddenPositions] = useState<Set<number>>(new Set());
     const [revealedPositions, setRevealedPositions] = useState<Set<number>>(new Set());
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // Fullscreen-toggle — kræver user gesture, så vi kan ikke auto-trigge det
+    // ved mount. Vi lytter til fullscreenchange så knap-teksten matcher state.
+    const toggleFullscreen = useCallback(() => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => {});
+        } else {
+            document.documentElement.requestFullscreen?.().catch(() => {});
+        }
+    }, []);
+
+    useEffect(() => {
+        const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onChange);
+        return () => document.removeEventListener('fullscreenchange', onChange);
+    }, []);
 
     const toggleHidden = useCallback((pos: number) => {
         setHiddenPositions(prev => {
@@ -50,9 +69,16 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
 
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
-            if (e.code !== 'Space') return;
             const target = e.target as HTMLElement | null;
             if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+            if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                toggleFullscreen();
+                return;
+            }
+
+            if (e.code !== 'Space') return;
             e.preventDefault();
             setRevealedPositions(prev => {
                 const pending = [...hiddenPositions].filter(p => !prev.has(p)).sort((a, b) => b - a);
@@ -64,7 +90,7 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
         };
         window.addEventListener('keydown', handleKey);
         return () => window.removeEventListener('keydown', handleKey);
-    }, [hiddenPositions]);
+    }, [hiddenPositions, toggleFullscreen]);
 
     const loadData = useCallback(async (isRefresh = false) => {
         if (!gameId) return;
@@ -144,13 +170,13 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
             </div>
 
             {/* Controls */}
-            <div className="w-full max-w-5xl flex flex-wrap items-center justify-center gap-2 md:gap-3 mb-6">
+            <div className="w-full max-w-6xl flex flex-wrap items-center justify-center gap-2 md:gap-3 mb-6">
                 <div className="flex items-center gap-1 bg-zinc-900/60 border border-zinc-800 rounded-lg p-1">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-2">Columns</span>
-                    {[1, 2].map((c) => (
+                    {[1, 2, 3, 4].map((c) => (
                         <button
                             key={c}
-                            onClick={() => setColumns(c as 1 | 2)}
+                            onClick={() => setColumns(c as 1 | 2 | 3 | 4)}
                             className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all ${
                                 columns === c ? 'bg-orange-600 text-black' : 'text-zinc-400 hover:text-white'
                             }`}
@@ -159,6 +185,28 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
                         </button>
                     ))}
                 </div>
+
+                <button
+                    onClick={toggleFullscreen}
+                    className="px-3 py-2 rounded-lg bg-zinc-900/60 border border-zinc-800 text-zinc-300 hover:bg-orange-600 hover:text-black hover:border-orange-500 text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-1.5"
+                    title={isFullscreen ? 'Luk fullscreen' : 'Vis fullscreen (F)'}
+                >
+                    {isFullscreen ? (
+                        <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V5H5m0 10v4h4m6-14h4v4m-4 10h4v-4" />
+                            </svg>
+                            Exit fullscreen
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+                            </svg>
+                            Fullscreen
+                        </>
+                    )}
+                </button>
 
                 <div className="flex items-center gap-1 bg-zinc-900/60 border border-zinc-800 rounded-lg p-1">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-2">Hide</span>
@@ -194,59 +242,87 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
                 )}
             </div>
 
-            {/* All teams */}
-            <div className={`w-full max-w-5xl mb-16 ${columns === 2 ? 'grid grid-cols-1 md:grid-cols-2 gap-3' : 'space-y-3'}`}>
-                {results.map((player) => {
-                    const isTop3 = player.position <= 3;
-                    const style = isTop3 ? medalStyles[player.position as 1 | 2 | 3] : null;
-                    const isHidden = hiddenPositions.has(player.position) && !revealedPositions.has(player.position);
-                    const justRevealed = hiddenPositions.has(player.position) && revealedPositions.has(player.position);
+            {/* All teams — grid vokser i bredde med antal kolonner så der er
+                plads til hele teamnavnet. Tekststørrelse skaleres ned i 3/4-
+                kolonne mode så vi ikke tvinger linjebrud på de korte navne. */}
+            {(() => {
+                const gridClass =
+                    columns === 1 ? 'space-y-3 w-full max-w-5xl'
+                    : columns === 2 ? 'grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-6xl'
+                    : columns === 3 ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 w-full max-w-[1600px]'
+                    : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 w-full max-w-[1900px]';
+                // Tre density-niveauer: rummeligt (1-2 kolonner), kompakt (3),
+                // og super-kompakt (4 kolonner). Tekst og padding skaleres ned
+                // så team-navne ikke rører scoren.
+                const compact = columns === 3;
+                const tight = columns === 4;
+                const rankSize = tight ? 'text-lg md:text-2xl w-8 md:w-10' : compact ? 'text-2xl md:text-3xl w-10 md:w-14' : 'text-3xl md:text-5xl w-16 md:w-20';
+                const trophySize = tight ? 'w-5 h-5 md:w-7 md:h-7' : compact ? 'w-6 h-6 md:w-8 md:h-8' : 'w-8 h-8 md:w-12 md:h-12';
+                const nameSize = tight ? 'text-xs md:text-sm' : compact ? 'text-base md:text-lg' : 'text-xl md:text-3xl';
+                const scoreSize = tight ? 'text-sm md:text-lg' : compact ? 'text-lg md:text-2xl' : 'text-2xl md:text-4xl';
+                const barH = tight ? 'h-6 md:h-8' : compact ? 'h-8 md:h-10' : 'h-10 md:h-14';
+                const pad = tight ? 'px-2 md:px-3 py-2 md:py-2.5 gap-2 md:gap-2.5' : compact ? 'px-3 md:px-4 py-3 md:py-3.5 gap-3 md:gap-4' : 'px-6 md:px-8 py-4 md:py-5 gap-4 md:gap-6';
 
-                    return (
-                        <div
-                            key={player.position}
-                            className={`flex items-center gap-4 md:gap-6 px-6 md:px-8 py-4 md:py-5 rounded-2xl border transition-all ${
-                                isHidden
-                                    ? 'bg-zinc-900/60 border-dashed border-zinc-700/60'
-                                    : isTop3
-                                        ? `${style!.bg} ${style!.border} ${style!.glow} ${justRevealed ? 'animate-fade-in' : ''}`
-                                        : 'bg-zinc-900/40 border-zinc-800/50'
-                            }`}
-                        >
-                            {/* Rank */}
-                            <div className={`text-3xl md:text-5xl font-black w-16 md:w-20 text-center shrink-0 ${
-                                isHidden ? 'text-zinc-600' : isTop3 ? style!.rank : 'text-zinc-600'
-                            }`}>
-                                {isTop3 && !isHidden ? (
-                                    <TrophyIcon className={`w-8 h-8 md:w-12 md:h-12 mx-auto ${style!.text}`} />
-                                ) : (
-                                    `#${player.position}`
-                                )}
-                            </div>
+                return (
+                    <div className={`${gridClass} mb-16`}>
+                        {results.map((player) => {
+                            const isTop3 = player.position <= 3;
+                            const style = isTop3 ? medalStyles[player.position as 1 | 2 | 3] : null;
+                            const isHidden = hiddenPositions.has(player.position) && !revealedPositions.has(player.position);
+                            const justRevealed = hiddenPositions.has(player.position) && revealedPositions.has(player.position);
 
-                            {/* Color bar + Name */}
-                            <div className="flex items-center flex-grow min-w-0">
+                            return (
                                 <div
-                                    className="w-2 h-10 md:h-14 rounded-sm mr-4 shrink-0"
-                                    style={{ backgroundColor: isHidden ? '#3f3f46' : (player.color || '#555') }}
-                                />
-                                <span className={`font-black text-xl md:text-3xl truncate uppercase tracking-wider ${
-                                    isHidden ? 'text-zinc-600' : isTop3 ? 'text-white' : 'text-zinc-300'
-                                }`}>
-                                    {isHidden ? '??????' : player.name}
-                                </span>
-                            </div>
+                                    key={player.position}
+                                    className={`flex items-center ${pad} rounded-2xl border transition-all ${
+                                        isHidden
+                                            ? 'bg-zinc-900/60 border-dashed border-zinc-700/60'
+                                            : isTop3
+                                                ? `${style!.bg} ${style!.border} ${style!.glow} ${justRevealed ? 'animate-fade-in' : ''}`
+                                                : 'bg-zinc-900/40 border-zinc-800/50'
+                                    }`}
+                                >
+                                    {/* Rank */}
+                                    <div className={`${rankSize} font-black text-center shrink-0 ${
+                                        isHidden ? 'text-zinc-600' : isTop3 ? style!.rank : 'text-zinc-600'
+                                    }`}>
+                                        {isTop3 && !isHidden ? (
+                                            <TrophyIcon className={`${trophySize} mx-auto ${style!.text}`} />
+                                        ) : (
+                                            `#${player.position}`
+                                        )}
+                                    </div>
 
-                            {/* Score */}
-                            <div className={`font-mono font-black text-2xl md:text-4xl shrink-0 ${
-                                isHidden ? 'text-zinc-600' : isTop3 ? style!.text : 'text-zinc-400'
-                            }`}>
-                                {isHidden ? '???' : player.score.toLocaleString()}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+                                    {/* Color bar + Name — navnet brydes naturligt ved mellemrum;
+                                        overflow-wrap-anywhere tvinger ultra-lange enkeltord som
+                                        "REFORMVOGTERNE" til at bryde i 4-kolonne mode. */}
+                                    <div className="flex items-center flex-grow min-w-0 pr-3 overflow-hidden">
+                                        <div
+                                            className={`w-2 ${barH} rounded-sm mr-3 shrink-0`}
+                                            style={{ backgroundColor: isHidden ? '#3f3f46' : (player.color || '#555') }}
+                                        />
+                                        <span
+                                            className={`font-black ${nameSize} uppercase tracking-wider leading-tight min-w-0 ${
+                                                isHidden ? 'text-zinc-600' : isTop3 ? 'text-white' : 'text-zinc-300'
+                                            }`}
+                                            style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                                        >
+                                            {isHidden ? '??????' : player.name}
+                                        </span>
+                                    </div>
+
+                                    {/* Score */}
+                                    <div className={`font-mono font-black ${scoreSize} shrink-0 ${
+                                        isHidden ? 'text-zinc-600' : isTop3 ? style!.text : 'text-zinc-400'
+                                    }`}>
+                                        {isHidden ? '???' : player.score.toLocaleString()}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
         </div>
     );
 };

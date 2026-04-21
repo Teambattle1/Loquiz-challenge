@@ -48,6 +48,7 @@ export interface SharedGallery {
     photos: GamePhoto[];
     hidden_ids: string[];
     hidden_team_ids?: string[];
+    selected_photo_ids?: string[];
     sections?: ShareSections;
     results?: PlayerResult[];
     created_at: string;
@@ -59,7 +60,7 @@ export const saveGallery = async (
     gameName: string | null,
     photos: GamePhoto[],
     hiddenIds: string[],
-    extras?: { sections?: ShareSections; results?: PlayerResult[]; hiddenTeamIds?: string[] }
+    extras?: { sections?: ShareSections; results?: PlayerResult[]; hiddenTeamIds?: string[]; selectedPhotoIds?: string[] }
 ): Promise<void> => {
     const payload: any = {
         game_id: gameId,
@@ -71,10 +72,29 @@ export const saveGallery = async (
     if (extras?.sections) payload.sections = extras.sections;
     if (extras?.results) payload.results = extras.results;
     if (extras?.hiddenTeamIds) payload.hidden_team_ids = extras.hiddenTeamIds;
+    if (extras?.selectedPhotoIds) payload.selected_photo_ids = extras.selectedPhotoIds;
     const { error } = await supabase
         .from('shared_galleries')
         .upsert(payload, { onConflict: 'game_id' });
     if (error) console.warn('Failed to save gallery:', error.message);
+};
+
+// Persist only the Showtime selection (lightweight update — keeps photos/results intact)
+export const updateShowtimeSelection = async (
+    gameId: string,
+    selectedPhotoIds: string[],
+    hiddenIds?: string[],
+): Promise<void> => {
+    const payload: any = {
+        selected_photo_ids: selectedPhotoIds,
+        updated_at: new Date().toISOString(),
+    };
+    if (hiddenIds) payload.hidden_ids = hiddenIds;
+    const { error } = await supabase
+        .from('shared_galleries')
+        .update(payload)
+        .eq('game_id', gameId);
+    if (error) console.warn('Failed to update showtime selection:', error.message);
 };
 
 // Update only the section visibility config
@@ -109,6 +129,12 @@ export const updateHiddenIds = async (gameId: string, hiddenIds: string[]): Prom
 // Get gallery share URL (legacy — photos only)
 export const getGalleryShareUrl = (gameId: string): string => {
     return `${window.location.origin}?gallery=${gameId}`;
+};
+
+// Direct showtime link — customer lands on slideshow (selected photos) and
+// is handed straight into the ResultsReveal podium flow afterwards.
+export const getShowtimeShareUrl = (gameId: string): string => {
+    return `${window.location.origin}?showtime=${gameId}`;
 };
 
 // Build a client share URL pointing to a specific section, optionally pre-selecting a team

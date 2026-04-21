@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GameTask, GamePhoto, PlayerResult } from '../types';
 import { saveSharedTasks, fetchSharedTasks, SharedTaskData } from '../services/taskShareService';
-import { saveGallery, fetchGallery, getClientSectionUrl, getClientShareUrlWithSections, ShareSections, DEFAULT_SECTIONS } from '../services/galleryService';
+import { saveGallery, fetchGallery, getClientSectionUrl, getClientShareUrlWithSections, getShowtimeShareUrl, ShareSections, DEFAULT_SECTIONS } from '../services/galleryService';
 import { useT } from '../lib/i18n';
 
 type TabType = 'tasks' | 'photos' | 'share';
@@ -70,6 +70,10 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
     // Share state
     const [copied, setCopied] = useState<string | null>(null);
 
+    // Count of photos picked for the direct Showtime link — lets admin see whether
+    // the link currently plays a selection or falls back to all visible photos.
+    const [showtimeSelectedCount, setShowtimeSelectedCount] = useState(0);
+
     const [loaded, setLoaded] = useState(false);
 
     // Load existing selections from Supabase
@@ -89,6 +93,8 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
             }
             const ht = (galleryData as any)?.hidden_team_ids as string[] | undefined;
             if (ht && ht.length > 0) setHiddenTeamIds(new Set(ht));
+            const sel = galleryData?.selected_photo_ids;
+            if (sel && sel.length > 0) setShowtimeSelectedCount(sel.length);
             setLoaded(true);
         });
     }, [gameId]);
@@ -367,6 +373,30 @@ const ClientHub: React.FC<ClientHubProps> = ({ tasks, photos, results, gameId, g
                                         copied === 'client' ? 'bg-green-600 text-white' : 'bg-orange-600 text-white group-hover:bg-orange-500'
                                     }`}>
                                         {copied === 'client' ? t('hub.share.copied') : t('hub.share.copy')}
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Direct Showtime link — slideshow of picked photos + podium reveal for the customer */}
+                        <div>
+                            <h3 className="text-white font-black uppercase tracking-wider text-sm mb-3">{t('hub.share.showtimeLink')}</h3>
+                            <div className="p-5 rounded-2xl bg-gradient-to-br from-pink-600/15 to-orange-600/15 border border-pink-500/40">
+                                <p className="text-white font-black uppercase tracking-wider text-sm">★ {t('hub.share.showtimeTitle')}</p>
+                                <p className="text-zinc-400 text-xs mt-1 mb-3">{t('hub.share.showtimeExplainer')}</p>
+                                <p className="text-pink-300 text-[11px] font-bold uppercase tracking-wider mb-4">
+                                    {showtimeSelectedCount > 0
+                                        ? `${showtimeSelectedCount} ${t('hub.share.photosPicked')}`
+                                        : `${photos.length - hiddenPhotoIds.size} ${t('hub.share.photosFallback')}`}
+                                    {results.length > 0 && <span className="text-zinc-500 ml-2">• {results.length} {t('hub.share.teams')}</span>}
+                                </p>
+                                <button onClick={() => copyLink('showtime', getShowtimeShareUrl(gameId))}
+                                    className="w-full flex items-center justify-between gap-4 p-3 rounded-lg bg-zinc-900/60 border border-zinc-700 hover:border-pink-500/60 transition-all group">
+                                    <p className="text-zinc-400 text-[11px] font-mono break-all text-left min-w-0 flex-grow">{getShowtimeShareUrl(gameId)}</p>
+                                    <div className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                                        copied === 'showtime' ? 'bg-green-600 text-white' : 'bg-gradient-to-r from-pink-600 to-orange-600 text-white group-hover:from-pink-500 group-hover:to-orange-500'
+                                    }`}>
+                                        {copied === 'showtime' ? t('hub.share.copied') : t('hub.share.copy')}
                                     </div>
                                 </button>
                             </div>

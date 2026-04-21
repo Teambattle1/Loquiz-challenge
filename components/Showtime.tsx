@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { GamePhoto } from '../types';
+import { GamePhoto, PlayerResult } from '../types';
 import MusicConfig from './MusicConfig';
 import { useMusicPlayer } from '../hooks/useMusicPlayer';
 import { getShowtimePlaylistId } from '../services/musicService';
-import { saveGallery, getGalleryShareUrl } from '../services/galleryService';
+import { saveGallery, fetchGallery, updateShowtimeSelection, getShowtimeShareUrl } from '../services/galleryService';
 
 interface ShowtimeProps {
   photos: GamePhoto[];
   gameId?: string;
   gameName?: string;
+  results?: PlayerResult[];
+  // When true: skip grid, auto-run the slideshow, hide admin controls.
+  // Used by PublicShowtime so the customer lands straight in the reveal flow.
+  playbackMode?: boolean;
   onClose: () => void;
   onShowtimeComplete?: () => void;
 }
@@ -26,8 +30,11 @@ const getStoredHidden = (): Set<string> => {
     catch { return new Set(); }
 };
 
-const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: ShowtimeProps) => {
-    const [view, setView] = useState<'grid' | 'slideshow' | 'countdown'>('grid');
+const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, onClose, onShowtimeComplete }: ShowtimeProps) => {
+    // In playback mode we skip the grid entirely — show a black screen until
+    // the gallery loads and the slideshow auto-starts, so the customer never
+    // sees admin chrome.
+    const [view, setView] = useState<'grid' | 'slideshow' | 'countdown'>(playbackMode ? 'countdown' : 'grid');
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -41,8 +48,28 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
     const [shareMsg, setShareMsg] = useState<string | null>(null);
     const [preloadDone, setPreloadDone] = useState(false);
     const [taskFilter, setTaskFilter] = useState<string | null>(null);
+    const [selectionLoaded, setSelectionLoaded] = useState(false);
     const music = useMusicPlayer();
     const showtimeCompleteTriggered = useRef(false);
+
+    // Load persisted selection (+ hidden) from Supabase so reopening picks up
+    // the admin's prior picks — and so the public showtime link stays in sync.
+    useEffect(() => {
+        if (!gameId) { setSelectionLoaded(true); return; }
+        fetchGallery(gameId).then(data => {
+            if (data?.selected_photo_ids && data.selected_photo_ids.length > 0) {
+                setSelectedIds(new Set(data.selected_photo_ids));
+            }
+            if (data?.hidden_ids && data.hidden_ids.length > 0) {
+                setHiddenIds(prev => {
+                    const merged = new Set(prev);
+                    data.hidden_ids.forEach(id => merged.add(id));
+                    return merged;
+                });
+            }
+            setSelectionLoaded(true);
+        }).catch(() => setSelectionLoaded(true));
+    }, [gameId]);
 
     // Unique task titles with counts — for filter badges
     const taskFilters = useMemo(() => {
@@ -89,14 +116,35 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
     // Visible photos (not hidden, respects task filter)
     const visiblePhotos = useMemo(() => filteredPhotos.filter(p => !hiddenIds.has(p.id)), [filteredPhotos, hiddenIds]);
 
-    // Share gallery link — saves to Supabase and copies link
-    const shareGallery = async () => {
+    // Persist showtime selection on close — keeps the customer link in sync with
+    // whatever admin picked, so adding more photos over time just reuses the link.
+    const persistSelection = useCallback(async () => {
+        if (!gameId || playbackMode) return;
+        try {
+            await updateShowtimeSelection(gameId, [...selectedIds], [...hiddenIds]);
+        } catch {
+            // Non-fatal — selection is also kept in localStorage via existing flow.
+        }
+    }, [gameId, playbackMode, selectedIds, hiddenIds]);
+
+    const handleClose = useCallback(() => {
+        // Fire-and-forget; do not block the UI close.
+        persistSelection();
+        onClose();
+    }, [persistSelection, onClose]);
+
+    // Copy direct showtime link — auto-saves photos, selection, hidden + results
+    // so the recipient gets whatever admin currently sees.
+    const copyShowtimeLink = async () => {
         if (!gameId) return;
-        await saveGallery(gameId, gameName || null, photos, [...hiddenIds]);
-        const url = getGalleryShareUrl(gameId);
+        await saveGallery(gameId, gameName || null, photos, [...hiddenIds], {
+            selectedPhotoIds: [...selectedIds],
+            results,
+        });
+        const url = getShowtimeShareUrl(gameId);
         try {
             await navigator.clipboard.writeText(url);
-            setShareMsg('Link kopieret!');
+            setShareMsg('Showtime-link kopieret!');
         } catch {
             setShareMsg(url);
         }
@@ -196,9 +244,10 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                if (playbackMode) { handleClose(); return; }
                 if (view === 'slideshow') setView('grid');
                 else if (view === 'countdown') setView('grid');
-                else onClose();
+                else handleClose();
             }
             if (view === 'slideshow') {
                 if (e.key === 'ArrowRight') setCurrentIndex(prev => (prev + 1) % slideshowPhotos.length);
@@ -208,7 +257,7 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [view, slideshowPhotos, currentIndex, onClose]);
+    }, [view, slideshowPhotos, currentIndex, handleClose, playbackMode]);
 
     const toggleSelect = (id: string) => {
         setSelectedIds(prev => {
@@ -232,7 +281,7 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
         preloadAndStart(doStart);
     };
 
-    const startShowtime = () => {
+    const startShowtime = useCallback(() => {
         showtimeCompleteTriggered.current = false;
         setIsShowtimeMode(true);
         // Request fullscreen for big-screen presentation
@@ -246,7 +295,17 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
             if (playlistId) music.playPlaylist(playlistId);
         };
         preloadAndStart(doStart);
-    };
+    }, [music, preloadAndStart]);
+
+    // Playback mode: skip grid entirely and jump straight into the showtime flow
+    // once the selection has been loaded (so we slideshow the picked photos only).
+    const playbackStartedRef = useRef(false);
+    useEffect(() => {
+        if (!playbackMode || !selectionLoaded || playbackStartedRef.current) return;
+        if (slideshowPhotos.length === 0) return;
+        playbackStartedRef.current = true;
+        startShowtime();
+    }, [playbackMode, selectionLoaded, slideshowPhotos.length, startShowtime]);
 
     const startSelectedSlideshow = () => {
         const doStart = () => {
@@ -263,7 +322,7 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
         return (
             <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center backdrop-blur-md">
                 <p className="text-zinc-500 font-bold uppercase tracking-widest mb-4">No photos found for this game</p>
-                <button onClick={onClose} className="px-6 py-2 bg-zinc-800 text-white rounded-full border border-zinc-700 hover:bg-orange-600 transition-colors uppercase tracking-wider font-bold">Close</button>
+                <button onClick={handleClose} className="px-6 py-2 bg-zinc-800 text-white rounded-full border border-zinc-700 hover:bg-orange-600 transition-colors uppercase tracking-wider font-bold">Close</button>
             </div>
         );
     }
@@ -311,10 +370,14 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                        {/* Share gallery */}
-                        {gameId && (
-                            <button onClick={shareGallery} className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white hover:border-zinc-500 transition-all">
-                                🔗 Del galleri
+                        {/* Copy direct showtime link — slideshow + podium for the customer */}
+                        {gameId && !playbackMode && (
+                            <button
+                                onClick={copyShowtimeLink}
+                                title="Kopiér link der starter slideshow + podium-reveal hos kunden"
+                                className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-pink-600/20 text-pink-300 border border-pink-500/40 hover:bg-pink-600/40 hover:text-white transition-all"
+                            >
+                                🔗 Showtime-link
                             </button>
                         )}
                         {/* MUSIK */}
@@ -370,7 +433,7 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                                 Play All ▶
                             </button>
                         )}
-                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                        <button onClick={handleClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -556,10 +619,12 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
             {/* Header */}
             <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-30 bg-gradient-to-b from-black/80 to-transparent">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => { setView('grid'); setIsShowtimeMode(false); }} className="text-zinc-400 hover:text-white flex items-center gap-1 uppercase text-xs font-bold tracking-wider">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                        Grid
-                    </button>
+                    {!playbackMode && (
+                        <button onClick={() => { setView('grid'); setIsShowtimeMode(false); }} className="text-zinc-400 hover:text-white flex items-center gap-1 uppercase text-xs font-bold tracking-wider">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                            Grid
+                        </button>
+                    )}
                     <span className="text-xs font-mono text-zinc-400 bg-black/50 px-2 py-1 rounded border border-zinc-700">
                         {currentIndex + 1} / {slideshowPhotos.length}
                     </span>
@@ -571,7 +636,7 @@ const Showtime = ({ photos, gameId, gameName, onClose, onShowtimeComplete }: Sho
                     >
                         {isPlaying ? '⏸' : '▶'}
                     </button>
-                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-900/80 hover:bg-red-900/50 hover:text-red-400 border border-zinc-700 flex items-center justify-center transition-colors">✕</button>
+                    <button onClick={handleClose} className="w-8 h-8 rounded-full bg-zinc-900/80 hover:bg-red-900/50 hover:text-red-400 border border-zinc-700 flex items-center justify-center transition-colors">✕</button>
                 </div>
             </div>
 

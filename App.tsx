@@ -10,6 +10,7 @@ import TaskInspector from './components/TaskInspector';
 import Timeline from './components/Timeline';
 import ResultsReveal from './components/ResultsReveal';
 import PublicGallery from './components/PublicGallery';
+import PublicShowtime from './components/PublicShowtime';
 import ClientHub from './components/ClientHub';
 import LanguageToggle from './components/LanguageToggle';
 import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
@@ -37,6 +38,11 @@ const getClientIdFromUrl = (): string | null => {
   return params.get('client');
 };
 
+const getShowtimeIdFromUrl = (): string | null => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('showtime');
+};
+
 export const buildSessionUrl = (gameId: string, view?: Exclude<ViewState, 'login' | 'lobby'>): string => {
   const base = `${window.location.origin}${window.location.pathname}`;
   const params = new URLSearchParams();
@@ -48,6 +54,12 @@ export const buildSessionUrl = (gameId: string, view?: Exclude<ViewState, 'login
 const App: React.FC = () => {
   const [galleryId] = useState<string | null>(getGalleryIdFromUrl);
   const [clientId] = useState<string | null>(getClientIdFromUrl);
+  const [showtimeId] = useState<string | null>(getShowtimeIdFromUrl);
+
+  // If ?showtime=GAMEID, hand the customer straight into slideshow + reveal
+  if (showtimeId) {
+    return <PublicShowtime gameId={showtimeId} />;
+  }
 
   // If ?gallery=GAMEID, show public gallery directly
   if (galleryId) {

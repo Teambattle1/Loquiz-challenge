@@ -155,6 +155,28 @@ const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
         return () => { if (autoRevealRef.current) clearTimeout(autoRevealRef.current); };
     }, []);
 
+    // Mellemrumstast / Enter = samme som at klikke den aktive primær-knap på
+    // skærmen: starter auto-reveal op til top 3, og reveal'er herefter #3/#2/#1
+    // ét klik ad gangen — så man kan trykke rytmisk uden at ramme mus/touch.
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key !== ' ' && e.key !== 'Enter') return;
+            // Ignore when an input/textarea/contentEditable has focus
+            const target = e.target as HTMLElement | null;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            e.preventDefault();
+            if (overlay !== 'none') return; // overlay er selv-timeet — lad den køre
+            if (allRevealed) return;
+            if (revealedCount < revealsToTop3) {
+                if (!autoRevealing) startAutoReveal();
+            } else {
+                revealNext();
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [overlay, allRevealed, revealedCount, revealsToTop3, autoRevealing]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // ─── Fullscreen overlays ────────────────────────────────────
     const renderOverlay = () => {
         if (overlay === 'highlight3' || overlay === 'highlight2') {

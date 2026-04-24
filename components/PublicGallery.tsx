@@ -5,6 +5,7 @@ import { fetchGallery, SharedGallery, DEFAULT_SECTIONS, ShareSections, decodeSho
 import { fetchSharedTasks, SharedTasks, SharedTaskData } from '../services/taskShareService';
 import { GamePhoto, PlayerResult } from '../types';
 import { useT } from '../lib/i18n';
+import { filterScoringResults } from '../lib/rankings';
 import LanguageToggle from './LanguageToggle';
 
 type TabType = 'photos' | 'tasks' | 'ranking' | 'answers' | 'teams';
@@ -166,12 +167,14 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
     const hasExplicitShow = !!urlSections;
     const sections: ShareSections = urlSections || { ...DEFAULT_SECTIONS, ...(gallery?.sections || {}) };
     const sharedResults: PlayerResult[] = (gallery?.results as PlayerResult[]) || [];
+    // Ranglisten viser kun hold der faktisk har scoret — se lib/rankings.ts.
+    const rankedResults = useMemo(() => filterScoringResults(sharedResults), [sharedResults]);
 
     // Tab visibility — when URL explicitly requests sections, render the tab even if empty
     // so the recipient sees the requested section (with an empty-state message) instead of "Not found"
     const hasPhotos = !!gallery && visiblePhotos.length > 0 && sections.gallery;
     const hasTasks = visibleTasks.length > 0 && sections.tasks;
-    const hasRanking = sharedResults.length > 0 && sections.ranking;
+    const hasRanking = rankedResults.length > 0 && sections.ranking;
     const hasAnswers = sharedResults.length > 0 && sections.answers;
     const hasTeams = sharedResults.length > 0 && sections.teams;
 
@@ -213,7 +216,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
 
     const tabConfig: { id: TabType; label: string; show: boolean; count?: number }[] = [
         { id: 'photos', label: t('public.tab.photos'), show: showPhotosTab, count: visiblePhotos.length },
-        { id: 'ranking', label: t('public.tab.ranking'), show: showRankingTab, count: sharedResults.length },
+        { id: 'ranking', label: t('public.tab.ranking'), show: showRankingTab, count: rankedResults.length },
         { id: 'tasks', label: t('public.tab.tasks'), show: showTasksTab, count: visibleTasks.length },
         { id: 'answers', label: t('public.tab.answers'), show: showAnswersTab, count: sharedResults.length },
         { id: 'teams', label: t('public.tab.teams'), show: showTeamsTab, count: visibleTeamLinks.length },
@@ -399,7 +402,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({ gameId, initialTab }) => 
             {activeTab === 'ranking' && hasRanking && (
                 <div className="p-4 md:p-8 max-w-3xl mx-auto">
                     <div className="space-y-2">
-                        {sharedResults.map(team => {
+                        {rankedResults.map(team => {
                             const slug = slugifyTeam(team);
                             const isHighlighted = activeTeamSlug === slug;
                             const isTop3 = team.position <= 3;

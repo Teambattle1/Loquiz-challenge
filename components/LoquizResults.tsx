@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { PlayerResult } from '../types';
 import { fetchGameResults, fetchGameInfo } from '../services/loquizService';
+import { filterScoringResults } from '../lib/rankings';
 import LiveToast from './LiveToast';
 import { TrophyIcon } from './icons';
 
@@ -147,7 +148,10 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
         </div>
     );
 
-    if (!results || results.length === 0) return (
+    // Skjul hold med præcis 0 point på ranglisten — se lib/rankings.ts.
+    const displayedResults = useMemo(() => filterScoringResults(results || []), [results]);
+
+    if (!results || displayedResults.length === 0) return (
         <div className="w-full flex flex-col items-center pt-32 px-4 animate-fade-in">
             <div className="text-center glass-panel p-12 rounded-3xl border border-white/5 max-w-2xl">
                 <h1 className="text-4xl font-black text-white uppercase mb-4 tracking-tighter">No Active Signals</h1>
@@ -265,7 +269,7 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
 
                 return (
                     <div className={`${gridClass} mb-16`}>
-                        {results.map((player) => {
+                        {displayedResults.map((player) => {
                             const isTop3 = player.position <= 3;
                             const style = isTop3 ? medalStyles[player.position as 1 | 2 | 3] : null;
                             const isHidden = hiddenPositions.has(player.position) && !revealedPositions.has(player.position);

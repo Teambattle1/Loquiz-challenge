@@ -14,6 +14,7 @@ import PublicShowtime from './components/PublicShowtime';
 import ClientHub from './components/ClientHub';
 import LanguageToggle from './components/LanguageToggle';
 import { fetchGameResults, fetchGameTasks, fetchGameInfo, fetchGamePhotos, getTaskTitle } from './services/loquizService';
+import { updateGalleryPhotos, fetchGallery } from './services/galleryService';
 import { PlayerResult, GameTask, GamePhoto } from './types';
 import { HouseIcon } from './components/icons';
 
@@ -145,6 +146,47 @@ const MainApp: React.FC = () => {
       loadGameData(selectedGameId, apiKey);
     }
   }, [selectedGameId, apiKey, loadGameData]);
+
+  // Keep photos live: poll Loquiz for new uploads so new entries show up in
+  // Showtime + ClientHub without requiring a full reload. When the photo set
+  // actually changed AND a shared_galleries row already exists (admin has
+  // generated a share/Showtime link), push the fresh list into the DB so the
+  // customer link doesn't stay frozen on the first snapshot.
+  useEffect(() => {
+    if (!selectedGameId || !apiKey || apiKey === 'GUEST') return;
+
+    let cancelled = false;
+
+    const syncPhotos = async () => {
+      try {
+        const fresh = await fetchGamePhotos(selectedGameId, apiKey);
+        if (cancelled) return;
+
+        // Only update local state when the set changed — otherwise every
+        // 20s tick would re-render children that key off `photos`.
+        setPhotos(prev => {
+          const changed = prev.length !== fresh.length
+              || fresh.some((p, i) => p.id !== prev[i]?.id);
+          if (!changed) return prev;
+
+          // Fire-and-forget DB sync; only writes if a gallery row exists
+          // (update-not-upsert — we don't create a row for games that were
+          // never shared).
+          fetchGallery(selectedGameId).then(existing => {
+              if (cancelled || !existing) return;
+              updateGalleryPhotos(selectedGameId, gameName, fresh).catch(() => {});
+          }).catch(() => {});
+
+          return fresh;
+        });
+      } catch {
+        // Transient Loquiz errors are fine; we'll retry on the next tick.
+      }
+    };
+
+    const id = setInterval(syncPhotos, 20000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [selectedGameId, apiKey, gameName]);
 
   const viewResults = (gameId: string) => {
     setSubView(null);

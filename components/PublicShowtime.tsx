@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { fetchGallery, SharedGallery } from '../services/galleryService';
+import { fetchPlaylistByName } from '../services/musicService';
 import { GamePhoto, PlayerResult } from '../types';
 import Showtime from './Showtime';
 import ResultsReveal from './ResultsReveal';
 import LanguageToggle from './LanguageToggle';
 import { useT } from '../lib/i18n';
+
+// Default playlist for the public Showtime link — played when admin hasn't
+// assigned a specific Showtime playlist yet. Named in the music.eventday.dk
+// Supabase so non-technical admins can curate it without touching code.
+const DEFAULT_PUBLIC_PLAYLIST_NAME = 'TeamPlay';
 
 interface PublicShowtimeProps {
     gameId: string;
@@ -23,13 +29,39 @@ const PublicShowtime: React.FC<PublicShowtimeProps> = ({ gameId }) => {
     const t = useT();
     const [stage, setStage] = useState<Stage>('loading');
     const [gallery, setGallery] = useState<SharedGallery | null>(null);
+    // Fallback playlist ID resolved from the music DB by name. Kept separate
+    // from gallery.showtime_playlist_id so admin's explicit pick still wins.
+    const [fallbackPlaylistId, setFallbackPlaylistId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchGallery(gameId).then(data => {
             if (!data) { setStage('error'); return; }
             setGallery(data);
-            setStage('ready');
-        }).catch(() => setStage('error'));
+            setStage(prev => prev === 'loading' ? 'ready' : prev);
+        }).catch(() => setStage(prev => prev === 'loading' ? 'error' : prev));
+    }, [gameId]);
+
+    // Resolve the default "TeamPlay" playlist once on mount. Done in parallel
+    // with the gallery fetch — non-blocking; if the lookup fails, we just
+    // play whatever admin picked (or silence, as before).
+    useEffect(() => {
+        let cancelled = false;
+        fetchPlaylistByName(DEFAULT_PUBLIC_PLAYLIST_NAME).then(pl => {
+            if (!cancelled && pl) setFallbackPlaylistId(pl.id);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
+    // Poll the gallery so admins who add more photos / tweak selection after
+    // the customer opened the link still see updates land without the
+    // customer refreshing. 15s matches the results-polling cadence elsewhere.
+    useEffect(() => {
+        const id = setInterval(() => {
+            fetchGallery(gameId).then(data => {
+                if (data) setGallery(data);
+            }).catch(() => {});
+        }, 15000);
+        return () => clearInterval(id);
     }, [gameId]);
 
     if (stage === 'loading') {
@@ -122,7 +154,7 @@ const PublicShowtime: React.FC<PublicShowtimeProps> = ({ gameId }) => {
             gameName={gallery.game_name || undefined}
             results={results}
             playbackMode
-            playlistIdOverride={gallery.showtime_playlist_id || null}
+            playlistIdOverride={gallery.showtime_playlist_id || fallbackPlaylistId}
             onClose={() => setStage(results.length > 0 ? 'reveal' : 'done')}
             onShowtimeComplete={() => setStage(results.length > 0 ? 'reveal' : 'done')}
         />

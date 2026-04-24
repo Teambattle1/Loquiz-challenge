@@ -137,6 +137,16 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
         }
     }, [gameId, playbackMode, selectedIds, hiddenIds]);
 
+    // Auto-save selection/hidden changes while Showtime is open — admin kept
+    // seeing their picks update locally ("tallene opdaterer") but the customer
+    // link stayed frozen on the first snapshot. Debounce so a rapid tap-storm
+    // only writes once. Skip the initial load tick (selectionLoaded gate).
+    useEffect(() => {
+        if (!gameId || playbackMode || !selectionLoaded) return;
+        const t = setTimeout(() => { persistSelection(); }, 800);
+        return () => clearTimeout(t);
+    }, [selectedIds, hiddenIds, gameId, playbackMode, selectionLoaded, persistSelection]);
+
     const handleClose = useCallback(() => {
         // Fire-and-forget; do not block the UI close.
         persistSelection();

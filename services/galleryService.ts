@@ -134,6 +134,27 @@ export const updateHiddenIds = async (gameId: string, hiddenIds: string[]): Prom
     if (error) console.warn('Failed to update hidden IDs:', error.message);
 };
 
+// Lightweight: refresh kun photos-kolonnen. Bruges til at holde customer-linket
+// i sync når admin henter nye billeder fra Loquiz, uden at røre selection /
+// hidden / results / playlist. Kun update (ikke upsert) — vi vil ikke oprette
+// en tom gallery-row bare fordi admin kigger på et game uden at have delt link.
+export const updateGalleryPhotos = async (
+    gameId: string,
+    gameName: string | null,
+    photos: GamePhoto[],
+): Promise<void> => {
+    const payload: any = {
+        photos,
+        updated_at: new Date().toISOString(),
+    };
+    if (gameName) payload.game_name = gameName;
+    const { error } = await supabase
+        .from('shared_galleries')
+        .update(payload)
+        .eq('game_id', gameId);
+    if (error) console.warn('Failed to update gallery photos:', error.message);
+};
+
 // Get gallery share URL (legacy — photos only)
 export const getGalleryShareUrl = (gameId: string): string => {
     return `${window.location.origin}?gallery=${gameId}`;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PlayerResult } from '../types';
+import { filterScoringResults } from '../lib/rankings';
 import { TrophyIcon } from './icons';
 
 interface ResultsRevealProps {
@@ -16,7 +17,8 @@ const medalStyles: Record<number, { bg: string; border: string; text: string; ra
 type OverlayState = 'none' | 'highlight3' | 'highlight2' | 'winner' | 'podium' | 'thanks';
 
 const ResultsReveal: React.FC<ResultsRevealProps> = ({ results, onClose }) => {
-    const sortedResults = [...results].sort((a, b) => a.position - b.position);
+    // Podium + list — hold med 0 point hører ikke hjemme på ranglisten.
+    const sortedResults = filterScoringResults(results).sort((a, b) => a.position - b.position);
     const totalTeams = sortedResults.length;
 
     const [revealedCount, setRevealedCount] = useState(0);

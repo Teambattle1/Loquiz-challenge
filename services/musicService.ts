@@ -36,6 +36,24 @@ export const fetchPlaylists = async (): Promise<MusicPlaylist[]> => {
     return data || [];
 };
 
+// Resolve a playlist by name — case-insensitive exact match. Used by the
+// public Showtime link to fall back to a default playlist ("TeamPlay" under
+// music.eventday.dk) when admin hasn't assigned one yet, so the customer-
+// facing slideshow always has music.
+export const fetchPlaylistByName = async (name: string): Promise<MusicPlaylist | null> => {
+    const { data, error } = await supabase
+        .from('music_playlists')
+        .select('id, name, created_at')
+        .ilike('name', name)
+        .limit(1)
+        .maybeSingle();
+    if (error) {
+        console.warn('Failed to fetch playlist by name:', error.message);
+        return null;
+    }
+    return data || null;
+};
+
 export const fetchTracks = async (playlistId: string): Promise<MusicTrack[]> => {
     const { data, error } = await supabase
         .from('music_tracks')

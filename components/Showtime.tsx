@@ -128,7 +128,10 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
     const persistSelection = useCallback(async () => {
         if (!gameId || playbackMode) return;
         try {
-            await updateShowtimeSelection(gameId, [...selectedIds], [...hiddenIds]);
+            // Include playlist ID so the customer link picks up music even if
+            // admin never re-clicks the Showtime-link button after changing
+            // the playlist in MusicConfig.
+            await updateShowtimeSelection(gameId, [...selectedIds], [...hiddenIds], getShowtimePlaylistId());
         } catch {
             // Non-fatal — selection is also kept in localStorage via existing flow.
         }
@@ -172,17 +175,30 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
 
         let loaded = 0;
         const total = items.length;
+        // Guard so the 8s video safety timeout doesn't re-fire startFn
+        // mid-slideshow (which would reset currentIndex to 0 and look like
+        // the show froze/restarted after a few photos).
+        let startTriggered = false;
 
         const checkDone = () => {
             loaded++;
-            setCountdownProgress(loaded / total);
-            if (loaded >= total) {
+            setCountdownProgress(Math.min(1, loaded / total));
+            if (loaded >= total && !startTriggered) {
+                startTriggered = true;
                 setPreloadDone(true);
                 setTimeout(startFn, 600);
             }
         };
 
         items.forEach(({ url, isVideo }) => {
+            // Per-item idempotency: oncanplaythrough + onerror + the 8s
+            // safety timeout can all race to call done(); we only count once.
+            let fired = false;
+            const done = () => {
+                if (fired) return;
+                fired = true;
+                checkDone();
+            };
             if (isVideo) {
                 // Preload via hidden <video preload="auto">. Vi brugte tidligere
                 // et fetch() først, men Firebase Storage sender ikke CORS-
@@ -193,15 +209,14 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
                 v.preload = 'auto';
                 v.muted = true;
                 v.src = url;
-                const done = () => { v.oncanplaythrough = null; v.onerror = null; checkDone(); };
-                v.oncanplaythrough = done;
-                v.onerror = done;
+                v.oncanplaythrough = () => { v.oncanplaythrough = null; v.onerror = null; done(); };
+                v.onerror = () => { v.oncanplaythrough = null; v.onerror = null; done(); };
                 // Safety timeout so a slow video never blocks start forever
                 setTimeout(done, 8000);
             } else {
                 const img = new Image();
-                img.onload = checkDone;
-                img.onerror = checkDone;
+                img.onload = done;
+                img.onerror = done;
                 img.src = url;
             }
         });
@@ -242,11 +257,17 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
         const v = currentVideoRef.current;
         if (!v) return;
         if (isPlaying) {
-            v.play().catch(() => {});
+            v.play().catch(err => {
+                // AbortError fires when the video unmounts mid-play (normal
+                // React churn). Anything else — autoplay block, decode error
+                // — means the video won't progress, so skip it instead of
+                // freezing the slideshow on a dead frame.
+                if (err?.name !== 'AbortError') advance();
+            });
         } else {
             v.pause();
         }
-    }, [isPlaying, currentIndex]);
+    }, [isPlaying, currentIndex, advance]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -322,16 +343,19 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
         setIsShowtimeMode(true);
         // Request fullscreen for big-screen presentation
         try { document.documentElement.requestFullscreen?.(); } catch {}
+        // Kick off music NOW — synchronously, still inside the user gesture.
+        // Preload can take up to 8s (video safety timeout); waiting until
+        // doStart lets the gesture expire and browsers block audio.play()
+        // with NotAllowedError, so the client link stays silent.
+        // I playbackMode har kunden ikke adminens localStorage, så vi bruger
+        // den override admin har persisteret med gallery-linket.
+        const playlistId = playlistIdOverride ?? getShowtimePlaylistId();
+        if (playlistId) music.playPlaylist(playlistId);
         const doStart = () => {
             setCurrentIndex(0);
             setView('slideshow');
             setIsPlaying(true);
             setSelectMode(false);
-            // I playbackMode har kunden ikke adminens localStorage, så vi bruger
-            // den override admin har persisteret med gallery-linket. I admin-
-            // mode bruger vi (stadig) adminens localStorage som før.
-            const playlistId = playlistIdOverride ?? getShowtimePlaylistId();
-            if (playlistId) music.playPlaylist(playlistId);
         };
         preloadAndStart(doStart);
     }, [music, preloadAndStart, playlistIdOverride]);
@@ -807,7 +831,17 @@ const Showtime = ({ photos, gameId, gameName, results, playbackMode = false, pla
                                     autoPlay
                                     playsInline
                                     controls={false}
+                                    // Mute in Showtime mode so (a) iOS/Safari
+                                    // don't block autoplay on the Nth video
+                                    // after the initial tap-gesture expired,
+                                    // and (b) video audio doesn't fight the
+                                    // background playlist. In admin grid-mode
+                                    // playback (not Showtime), keep sound on.
+                                    muted={isShowtimeMode}
                                     onEnded={advance}
+                                    // If the video fails to load/decode, skip
+                                    // rather than freeze the slideshow on it.
+                                    onError={advance}
                                     className="block max-h-[78vh] max-w-[85vw] object-contain rounded-xl"
                                 />
                             ) : (

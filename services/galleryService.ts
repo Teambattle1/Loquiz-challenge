@@ -88,12 +88,16 @@ export const updateShowtimeSelection = async (
     gameId: string,
     selectedPhotoIds: string[],
     hiddenIds?: string[],
+    showtimePlaylistId?: string | null,
 ): Promise<void> => {
     const payload: any = {
         selected_photo_ids: selectedPhotoIds,
         updated_at: new Date().toISOString(),
     };
     if (hiddenIds) payload.hidden_ids = hiddenIds;
+    // Persister playlist-valget så kundens public link kan afspille musikken
+    // uden at admin skal re-kopiere linket hver gang de vælger ny playlist.
+    if (showtimePlaylistId !== undefined) payload.showtime_playlist_id = showtimePlaylistId;
     const { error } = await supabase
         .from('shared_galleries')
         .update(payload)

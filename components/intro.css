@@ -1,0 +1,142 @@
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  animation: intro-fadeout 0.8s ease 4.2s forwards;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+}
+@keyframes intro-fadeout {
+  to {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.intro-logo {
+  font-size: 72px;
+  font-weight: bold;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: intro-zoom 1.5s ease 0.3s forwards;
+}
+.intro-logo .w {
+  color: #fff;
+}
+.intro-logo .o {
+  color: #4fc3f7;
+}
+@keyframes intro-zoom {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+    filter: blur(20px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+.intro-sub {
+  color: #888;
+  font-size: 18px;
+  letter-spacing: 4px;
+  margin-top: 15px;
+  opacity: 0;
+  animation: intro-slide 1s ease 1.8s forwards;
+}
+.intro-sub .by {
+  color: rgba(255, 255, 255, 0.45);
+}
+.intro-sub .w {
+  color: #fff;
+  font-weight: bold;
+}
+.intro-sub .o {
+  color: #4fc3f7;
+  font-weight: bold;
+}
+@keyframes intro-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.intro-line {
+  width: 0;
+  height: 2px;
+  background: #4fc3f7;
+  margin-top: 25px;
+  animation: intro-line-grow 1.2s ease 2.5s forwards;
+}
+@keyframes intro-line-grow {
+  to {
+    width: 200px;
+  }
+}
+
+.fireflies {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.firefly {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #b3e5fc;
+  border-radius: 50%;
+  box-shadow:
+    0 0 6px 2px rgba(140, 220, 255, 0.9),
+    0 0 14px 4px rgba(79, 195, 247, 0.5),
+    0 0 28px 8px rgba(79, 195, 247, 0.25);
+  opacity: 0;
+  animation-name: firefly-drift, firefly-twinkle;
+  animation-iteration-count: infinite, infinite;
+  animation-timing-function: ease-in-out, ease-in-out;
+}
+@keyframes firefly-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(35px, -25px);
+  }
+  50% {
+    transform: translate(10px, -55px);
+  }
+  75% {
+    transform: translate(-30px, -30px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+@keyframes firefly-twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}

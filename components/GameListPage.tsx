@@ -11,16 +11,23 @@ interface GameListPageProps {
 type TabType = 'today' | 'planned' | 'completed';
 
 /**
- * Extracts a date from a string or number. 
- * Prioritizes DD-MM-YYYY or DD-MM-YY formats found anywhere in the string.
+ * Extract an event date from the game.
+ *
+ * Vi prioriterer titlen først, fordi den indeholder *event-datoen* (hvornår
+ * spillet faktisk afholdes), mens `rawValue` (Loquiz `created.at`) er
+ * server-side oprettelsestidspunkt og kan ligge dage før event'en. For
+ * grupperingen i TODAY/PLANNED/COMPLETED er det event-datoen der tæller.
+ *
+ * Regex-separatorerne tillader nu også mellemrum mellem MM og YYYY for at
+ * matche det nye titel-format `"DD-MM YYYY // ..."`.
  */
 const parseGameDate = (rawValue: string | number | undefined, fallbackString?: string): Date | null => {
     const extractFromStr = (str: string): Date | null => {
-        // Match DD-MM-YYYY or DD-MM-YY with various separators
-        const euMatch = str.match(/(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})/);
+        // DD-MM-YYYY / DD/MM/YY / DD.MM.YYYY samt nyt format DD-MM YYYY
+        const euMatch = str.match(/(\d{1,2})[-./](\d{1,2})[-./\s](\d{2,4})/);
         if (euMatch) {
             const day = parseInt(euMatch[1], 10);
-            const month = parseInt(euMatch[2], 10) - 1; 
+            const month = parseInt(euMatch[2], 10) - 1;
             let year = parseInt(euMatch[3], 10);
             if (year < 100) year += 2000;
             const d = new Date(year, month, day);
@@ -29,6 +36,13 @@ const parseGameDate = (rawValue: string | number | undefined, fallbackString?: s
         return null;
     };
 
+    // Titel = event-dato (mest præcis) → forsøg først
+    if (fallbackString) {
+        const d = extractFromStr(fallbackString);
+        if (d) return d;
+    }
+
+    // Fallback: timestamp fra Loquiz API (creation time)
     if (typeof rawValue === 'number') {
         const d = rawValue < 100000000000 ? new Date(rawValue * 1000) : new Date(rawValue);
         return isNaN(d.getTime()) ? null : d;
@@ -37,16 +51,10 @@ const parseGameDate = (rawValue: string | number | undefined, fallbackString?: s
     if (typeof rawValue === 'string' && rawValue.trim()) {
         const d = extractFromStr(rawValue);
         if (d) return d;
-        
-        // Try standard ISO fallback
+
+        // Standard ISO fallback
         const isoD = new Date(rawValue.replace(' ', 'T'));
         if (!isNaN(isoD.getTime())) return isoD;
-    }
-
-    // Final fallback: Check the name/title of the game
-    if (fallbackString) {
-        const d = extractFromStr(fallbackString);
-        if (d) return d;
     }
 
     return null;

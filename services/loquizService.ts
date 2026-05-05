@@ -102,6 +102,17 @@ const mapApiTasksToGameTasks = (data: any[]): GameTask[] => {
     }));
 };
 
+// Loquiz returnerer nogle datofelter som strenge/tal, men `created`/`updated`
+// kommer som objekter på formen `{ at: <unix-seconds>, by: {...} }`. Træk
+// timestamp'et ud så downstream date-parsing får et rent tal i stedet for
+// `[object Object]`.
+const extractTimestamp = (raw: any): string | number | undefined => {
+    if (raw == null) return undefined;
+    if (typeof raw === 'string' || typeof raw === 'number') return raw;
+    if (typeof raw === 'object' && typeof raw.at === 'number') return raw.at;
+    return undefined;
+};
+
 export const fetchGames = async (apiKey: string): Promise<GameListItem[]> => {
     if (apiKey === 'GUEST') return [];
     const headers = getAuthHeaders(apiKey);
@@ -124,7 +135,12 @@ export const fetchGames = async (apiKey: string): Promise<GameListItem[]> => {
                     allFetchedGames.push({
                         id: game.id,
                         name: game.title || game.name || game.id,
-                        created: game.eventDate || game.date || game.startTime || game.start || game.created || game.createdAt,
+                        created: extractTimestamp(game.eventDate)
+                            ?? extractTimestamp(game.date)
+                            ?? extractTimestamp(game.startTime)
+                            ?? extractTimestamp(game.start)
+                            ?? extractTimestamp(game.created)
+                            ?? extractTimestamp(game.createdAt),
                         isPlayable: game.playable !== false,
                         status: game.status
                     });

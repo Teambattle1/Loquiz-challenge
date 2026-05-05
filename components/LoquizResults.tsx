@@ -130,6 +130,13 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
         return () => clearInterval(intervalId);
     }, [loadData]);
 
+    // Skjul hold med præcis 0 point på ranglisten — se lib/rankings.ts.
+    // Skal kaldes FØR de tidlige returns nedenunder, ellers ændrer hook-
+    // rækkefølgen sig mellem renders (loading → loaded) og React kaster
+    // "change in the order of Hooks" — som tidligere fik hele result-siden
+    // til at crashe og rendere blank.
+    const displayedResults = useMemo(() => filterScoringResults(results || []), [results]);
+
     if (isLoading) return (
         <div className="flex flex-col items-center justify-center text-center h-64">
             <div className="w-16 h-16 border-4 border-orange-500 border-t-white rounded-full animate-spin mb-6"></div>
@@ -147,9 +154,6 @@ const LoquizResults: React.FC<LoquizResultsProps> = ({ apiKey, gameId, onBack })
             </div>
         </div>
     );
-
-    // Skjul hold med præcis 0 point på ranglisten — se lib/rankings.ts.
-    const displayedResults = useMemo(() => filterScoringResults(results || []), [results]);
 
     if (!results || displayedResults.length === 0) return (
         <div className="w-full flex flex-col items-center pt-32 px-4 animate-fade-in">
